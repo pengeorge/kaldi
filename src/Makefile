@@ -7,6 +7,9 @@ SHELL := /bin/bash
 
 SUBDIRS = base matrix util feat tree thread gmm transform sgmm \
           fstext hmm lm decoder lat kws cudamatrix nnet \
+					chenzp-util chenzp-featbin chenzp-fgmmbin chenzp-fstbin \
+					chenzp-kwsbin chenzp-latbin chenzp-nnet2bin \
+					chenzp-sgmmbin chenzp-subword \
           bin fstbin gmmbin fgmmbin sgmmbin featbin \
           nnetbin latbin sgmm2 sgmm2bin nnet2 nnet3 nnet3bin nnet2bin kwsbin \
           ivector ivectorbin online2 online2bin lmbin
