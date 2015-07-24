@@ -1,7 +1,0 @@
-declare -A systems
-systems=(
-  ['word_plp_smbr']="../204LLP/exp/tri6_nnet_mpe/decode_${datadir}_epoch*"
-  ['word_bnf_ce']="../204LLP/exp_bnf/tri7_nnet/decode_${datadir}"
-  ['syl_plp_smbr']="../204LLP-syllable/exp/tri6_nnet_mpe/decode_${datadir}_epoch*"
-  ['sub_plp_smbr']="../204LLP-subword6-fix/exp/tri6_nnet_mpe/decode_${datadir}_epoch*"
-)
