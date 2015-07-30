@@ -1,0 +1,1 @@
+exp/dnn_scratch_6langFLPNN.raw_cont_mpe/decode_dev10h.pem_ext_epoch1/bbnucoluc100w5-exc-VLLP_kws_11/Ntrue.txt
