@@ -1,12 +1,12 @@
 
 all:
-EXTRA_CXXFLAGS = -Wno-sign-compare
+EXTRA_CXXFLAGS = -Wno-sign-compare -g
 include ../kaldi.mk
 
 LDFLAGS += $(CUDA_LDFLAGS)
 LDLIBS += $(CUDA_LDLIBS)
 
-BINFILES = nnet-latgen-faster-parallel.chenzp nnet-am-reinitialize-fix-shallow-affine-layers
+BINFILES = nnet-latgen-faster-parallel.chenzp nnet-am-fix-shallow-affines
 
 OBJFILES =
 

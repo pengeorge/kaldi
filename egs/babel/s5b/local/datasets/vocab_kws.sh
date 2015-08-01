@@ -19,6 +19,7 @@ if [ "$dataset_kind" == "shadow" ]; then
 elif [ ! -f $dataset_dir/.done.kws.fullvocab ] ; then
   #a This will work for both supervised and unsupervised dataset kinds
   kws_flags=()
+  set +u # otherwise would report 'unbounded variable' error due to 'set -u' (chenzp Feb 28,2014)
   if [ "$dataset_kind" == "supervised" ] ; then
     kws_flags+=(--rttm-file $my_rttm_file )
   fi
@@ -42,6 +43,7 @@ elif [ ! -f $dataset_dir/.done.kws.fullvocab ] ; then
         grep -v -F "<" | grep -v -F "#"  | \
         awk "{printf \"KWID$langid-FULLVOCAB-%05d %s\\n\", \$2, \$1 }" ) \
     data/lang ${dataset_dir} || exit 1
+  set -u
 
   echo fullvocab >> $dataset_dir/extra_kws_tasks;  
   sort -u $dataset_dir/extra_kws_tasks -o  $dataset_dir/extra_kws_tasks

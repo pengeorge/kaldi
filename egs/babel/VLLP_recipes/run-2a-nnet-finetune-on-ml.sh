@@ -93,8 +93,9 @@ else
         nnet-am-reinitialize $input_model $ali_dir/final.mdl $dir/input.mdl || exit 1;
       ;;
     last)
-      echo "Not supported yet"
-      exit 1
+      $train_cmd $dir/log/fix-shallow-and-reinitialize.log \
+        nnet-am-fix-shallow-affines $input_model - \| \
+        nnet-am-reinitialize - $ali_dir/final.mdl $dir/input.mdl || exit 1;
       ;;
   esac
 
