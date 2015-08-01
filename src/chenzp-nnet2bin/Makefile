@@ -6,7 +6,7 @@ include ../kaldi.mk
 LDFLAGS += $(CUDA_LDFLAGS)
 LDLIBS += $(CUDA_LDLIBS)
 
-BINFILES = nnet-latgen-faster-parallel.chenzp
+BINFILES = nnet-latgen-faster-parallel.chenzp nnet-am-reinitialize-fix-shallow-affine-layers
 
 OBJFILES =
 

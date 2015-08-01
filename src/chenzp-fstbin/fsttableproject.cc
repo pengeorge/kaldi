@@ -1,4 +1,4 @@
-// fstbin/fstmakestochastic.cc
+// fstbin/fsttableproject.cc
 
 // Copyright 2009-2011  Microsoft Corporation
 // Copyright 2014  Tsinghua University (Author: Zhipeng Chen)
@@ -24,7 +24,6 @@
 #include "util/parse-options.h"
 #include "fst/fstlib.h"
 #include "fstext/fstext-utils.h"
-#include "fstext/rescale.h"
 #include "fstext/fstext-utils.h"
 #include "fstext/fst-test-utils.h"
 
@@ -41,7 +40,7 @@ int main(int argc, char **argv) {
         "Project all FSTs in archive.\n"
         "Output to another archive.\n"
         "\n"
-        "Usage:  fstisstochastic [ ark:in.fsts [ ark:out.fsts ] ]\n";
+        "Usage:  fsttableproject [ ark:in.fsts [ ark:out.fsts ] ]\n";
 
 
     ParseOptions po(usage);

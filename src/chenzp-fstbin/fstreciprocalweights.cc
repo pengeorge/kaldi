@@ -1,4 +1,4 @@
-// fstbin/fstmakestochastic.cc
+// fstbin/fstreciprocalweights.cc
 
 // Copyright 2009-2011  Microsoft Corporation
 // Copyright 2014  Tsinghua University (Author: Zhipeng Chen)
@@ -24,7 +24,6 @@
 #include "util/parse-options.h"
 #include "fst/fstlib.h"
 #include "fstext/fstext-utils.h"
-#include "fstext/rescale.h"
 #include "fstext/fstext-utils.h"
 #include "fstext/fst-test-utils.h"
 // Just check that it compiles, for now.

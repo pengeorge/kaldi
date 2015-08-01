@@ -1,0 +1,17 @@
+*
+!*.h
+!*.c
+!*.cc
+!*.cpp
+!*.cu
+!README*
+!*.list
+!*.vcxproj
+!*.jpg
+!/nnet2bin/raw-nnet-init
+!/doc
+!/makefiles
+.*.swp
+.*.mk
+*.o
+src/cscope.out

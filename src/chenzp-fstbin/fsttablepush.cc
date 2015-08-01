@@ -1,4 +1,4 @@
-// fstbin/fstmakestochastic.cc
+// fstbin/fsttablepush.cc
 
 // Copyright 2009-2011  Microsoft Corporation
 // Copyright 2014  Tsinghua University (Author: Zhipeng Chen)
@@ -24,7 +24,6 @@
 #include "util/parse-options.h"
 #include "fst/fstlib.h"
 #include "fstext/fstext-utils.h"
-#include "fstext/rescale.h"
 #include "fstext/fstext-utils.h"
 #include "fstext/fst-test-utils.h"
 // Just check that it compiles, for now.
@@ -35,10 +34,9 @@ int main(int argc, char **argv) {
     using kaldi::int32;
 
     const char *usage =
-        "Rescale an FST on log semiring.\n"
-        "Prints out maximum error (in log units).\n"
+        "Push for all FSTs in an archive.\n"
         "\n"
-        "Usage:  fstscale [ in.fst [ out.fst ] ]\n";
+        "Usage:  fsttablepush [ in.fsts [ out.fsts ] ]\n";
 
     float delta = 0.001;
 

@@ -13,7 +13,7 @@ ali_dir=exp/tri6_nnet_ali
 ali_model=exp/tri6b_nnet/
 ali_model_transform_dir=exp/tri5_ali
 
-ensemble_finetune=false
+finetune_type=whole # whole/softmax/ensemble
 bnf_weight_threshold=0.7
 weights_dir=exp_bnf_semisup/best_path_weights/unsup.seg/decode_unsup.seg/
 ## Options for get_egs2 ########
@@ -33,9 +33,15 @@ set -u
 
 input_model=$mldir/0/final.mdl
 dir=exp/`basename $mldir`_cont  # Working directory
-if $ensemble_finetune; then
-  dir=${dir}_en
-fi
+case $finetune_type in
+  ensemble)
+    dir=${dir}_en
+    ;;
+  last)
+    dir=${dir}_last
+    ;;
+esac
+
 if $semisupervised ; then
   dir=${dir}_semisup${bnf_weight_threshold}
 fi
@@ -80,34 +86,52 @@ if [ -f $dir/.done ]; then
   echo "$dir is already done. Remove $dir/.done to re-run."
   exit 0;
 else
-  if ! $ensemble_finetune; then
-    $train_cmd $dir/log/reinitialize.log \
-      nnet-am-reinitialize $input_model $ali_dir/final.mdl $dir/input.mdl || exit 1;
-    czpScripts/nnet2/train_pnorm_fast_continue.sh \
-      --feat-type $feat_type --splice-width $splice_width \
-      --transform-dir exp/tri5_ali \
-      --stage $train_stage --mix-up $dnn_mixup \
-      --initial-learning-rate $dnn_init_learning_rate \
-      --final-learning-rate $dnn_final_learning_rate \
-      --cmd "$train_cmd" $egs_string \
-      "${dnn_gpu_parallel_opts[@]}" \
-      data/train data/lang $ali_dir $dir/input.mdl $dir || exit 1
+  # initialize model for non-ensemble training type
+  case $finetune_type in
+    whole)
+      $train_cmd $dir/log/reinitialize.log \
+        nnet-am-reinitialize $input_model $ali_dir/final.mdl $dir/input.mdl || exit 1;
+      ;;
+    last)
+      echo "Not supported yet"
+      exit 1
+      ;;
+  esac
 
-    cp exp/tri6_nnet_ali/cmvn_opts $dir/
-    touch $dir/.done
-  else
-    # Unlike non-ensemble training , here reinitialization will be done in the training script
-    czpScripts/nnet2/train_pnorm_ensemble_continue.sh \
-      --feat-type $feat_type --splice-width $splice_width \
-      --transform-dir exp/tri5_ali \
-      --stage $train_stage --mix-up $dnn_mixup \
-      --initial-learning-rate $ensemble_dnn_init_learning_rate \
-      --final-learning-rate $ensemble_dnn_final_learning_rate \
-      --cmd "$train_cmd" $egs_string \
-      "${dnn_gpu_parallel_opts[@]}" \
-      --ensemble-size $ensemble_size --initial-beta $ensemble_initial_beta --final-beta $ensemble_final_beta \
-      data/train data/lang $ali_dir $input_model $dir || exit 1
-    cp exp/tri6_nnet_ali/cmvn_opts $dir/
-    touch $dir/.done
-  fi
+  # do fine-tuning
+  case $finetune_type in
+    whole|last)
+      czpScripts/nnet2/train_pnorm_fast_continue.sh \
+        --feat-type $feat_type --splice-width $splice_width \
+        --transform-dir exp/tri5_ali \
+        --stage $train_stage --mix-up $dnn_mixup \
+        --initial-learning-rate $dnn_init_learning_rate \
+        --final-learning-rate $dnn_final_learning_rate \
+        --cmd "$train_cmd" $egs_string \
+        "${dnn_gpu_parallel_opts[@]}" \
+        data/train data/lang $ali_dir $dir/input.mdl $dir || exit 1
+
+      cp exp/tri6_nnet_ali/cmvn_opts $dir/
+      touch $dir/.done
+      ;;
+    ensemble)
+      # Unlike non-ensemble training , here reinitialization will be done in the training script
+      czpScripts/nnet2/train_pnorm_ensemble_continue.sh \
+        --feat-type $feat_type --splice-width $splice_width \
+        --transform-dir exp/tri5_ali \
+        --stage $train_stage --mix-up $dnn_mixup \
+        --initial-learning-rate $ensemble_dnn_init_learning_rate \
+        --final-learning-rate $ensemble_dnn_final_learning_rate \
+        --cmd "$train_cmd" $egs_string \
+        "${dnn_gpu_parallel_opts[@]}" \
+        --ensemble-size $ensemble_size --initial-beta $ensemble_initial_beta --final-beta $ensemble_final_beta \
+        data/train data/lang $ali_dir $input_model $dir || exit 1
+      cp exp/tri6_nnet_ali/cmvn_opts $dir/
+      touch $dir/.done
+      ;;
+    *)
+      echo "Unknown finetune type: $finetune_type"
+      exit 1
+      ;;
+  esac
 fi
