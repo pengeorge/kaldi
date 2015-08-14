@@ -1,0 +1,8 @@
+ensemble_dnn_num_hidden_layers=4
+ensemble_dnn_pnorm_input_dim=1500
+ensemble_dnn_pnorm_output_dim=150
+ensemble_dnn_init_learning_rate=0.004
+ensemble_dnn_final_learning_rate=0.001
+ensemble_size=4
+ensemble_initial_beta=0.1
+ensemble_final_beta=5

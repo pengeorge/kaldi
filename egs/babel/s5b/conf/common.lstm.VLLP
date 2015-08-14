@@ -1,0 +1,4 @@
+lstm_splice=0
+lstm_proto_opts="--num-cells 512 --num-recurrent 1024 --num-layers 2 --clip-gradient 50.0"
+lstm_num_hidden_layers=2
+lstm_learning_rate=0.0001

@@ -1,0 +1,10 @@
+cnn_splice=5
+cnn_proto_opts="--patch-dim1 8 --pitch-dim 3"
+cnn_num_hidden_layers=2
+cnn_learning_rate=0.008
+cnn_dbn_depth=4
+cnn_dbn_hidden_layer_dim=1024
+cnn_rbm_iter_num=20
+cnn_dbn_param_stddev_first=0.05
+cnn_dbn_param_stddev=0.05
+cnn_acwt=0.1 # For RM, 0.2 is good. For others, default value is 0.1

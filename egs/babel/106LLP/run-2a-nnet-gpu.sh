@@ -1,0 +1,1 @@
+../s5c/run-2a-nnet-gpu.sh

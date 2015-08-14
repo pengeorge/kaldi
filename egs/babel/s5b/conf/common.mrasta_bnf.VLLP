@@ -1,0 +1,12 @@
+# MRASTA BNF training parameters
+mrasta_bnf_num_hidden_layers=4
+mrasta_bnf_multilang_num_hidden_layers=6
+mrasta_bottleneck_dim=42
+mrasta_bnf_hidden_layer_dim=1024
+mrasta_bnf_minibatch_size=512
+mrasta_bnf_init_learning_rate=0.008
+mrasta_bnf_final_learning_rate=0.0008
+mrasta_bnf_max_change=40
+mrasta_bnf_num_jobs=4
+mrasta_bnf_num_threads=1
+mrasta_bnf_mixup=3000
