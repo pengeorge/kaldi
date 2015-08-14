@@ -971,7 +971,7 @@ fi
 ##
 ####################################################################
 if [[ "$sys_to_decode" =~ " ml_dnn " ]]; then
-  suffixes='scratch_6langFLPNN.raw_cont_last'
+  suffixes='scratch_4lang10hr_5hid.raw_cont'
   if $multilang_test; then 
     suffixes="$suffixes scratch_5lang80hr_5hid_mix10k_3k.raw_cont_30ep"
   fi

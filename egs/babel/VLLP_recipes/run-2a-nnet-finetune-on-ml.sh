@@ -53,7 +53,7 @@ else
 fi
 
 if [ ! -f $ali_dir/.done ]; then
-  echo "$0: Aligning supervised training data in exp/tri6_nnet_ali"
+  echo "$0: Aligning supervised training data in $ali_dir"
 
   [ ! -f $ali_model/final.mdl ] && echo -e "$ali_model/final.mdl not found!\nRun run-6-nnet.sh first!" && exit 1
   steps/nnet2/align.sh  --cmd "$train_cmd" \
@@ -111,9 +111,6 @@ else
         --cmd "$train_cmd" $egs_string \
         "${dnn_gpu_parallel_opts[@]}" \
         data/train data/lang $ali_dir $dir/input.mdl $dir || exit 1
-
-      cp exp/tri6_nnet_ali/cmvn_opts $dir/
-      touch $dir/.done
       ;;
     ensemble)
       # Unlike non-ensemble training , here reinitialization will be done in the training script
@@ -127,12 +124,12 @@ else
         "${dnn_gpu_parallel_opts[@]}" \
         --ensemble-size $ensemble_size --initial-beta $ensemble_initial_beta --final-beta $ensemble_final_beta \
         data/train data/lang $ali_dir $input_model $dir || exit 1
-      cp exp/tri6_nnet_ali/cmvn_opts $dir/
-      touch $dir/.done
       ;;
     *)
       echo "Unknown finetune type: $finetune_type"
       exit 1
       ;;
   esac
+  cp $ali_dir/cmvn_opts $dir/
+  touch $dir/.done
 fi
