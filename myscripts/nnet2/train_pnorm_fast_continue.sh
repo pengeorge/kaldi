@@ -47,6 +47,10 @@ shuffle_buffer_size=5000 # This "buffer_size" variable controls randomization of
                 # since in the preconditioning method, 2 samples in the same minibatch can
                 # affect each others' gradients.
 
+add_layers_period=2 # by default, add new layers every 2 iterations.
+num_additional_hidden_layers=0
+hidden_config=
+
 stage=-5
 
 io_opts="-tc 5" # for jobs with a lot of I/O, limits the number running at one time.   These don't
@@ -185,7 +189,6 @@ iters_per_epoch=`cat $egs_dir/iters_per_epoch`  || exit 1;
   echo "$0: Warning: using --num-jobs-nnet=`cat $egs_dir/num_jobs_nnet` from $egs_dir"
 num_jobs_nnet=`cat $egs_dir/num_jobs_nnet` || exit 1;
 
-
 cp $input_model $dir/0.mdl
 echo $input_model > $dir/input_model
 
@@ -227,7 +230,16 @@ function set_target_objf_change {
   done
 }
 
-finish_add_layers_iter=0
+if [ $num_additional_hidden_layers -gt 0 ] && [ ! -f "$hidden_config" ]; then
+  echo "Wrong options: num_additional_hidden_layers = $num_additional_hidden_layers but hidden layer config file \"$hidden_config\" does not exist."
+  exit 1;
+fi
+
+if [ $num_additional_hidden_layers -gt 0 ]; then
+  finish_add_layers_iter=$[1 + ($num_additional_hidden_layers - 1) * $add_layers_period]
+else
+  finish_add_layers_iter=0
+fi
 # This is when we decide to mix up from: halfway between when we've finished
 # adding the hidden layers and the end of training.
 mix_up_iter=$[($num_iters + $finish_add_layers_iter)/2]
@@ -265,9 +277,17 @@ while [ $x -lt $num_iters ]; do
     
     echo "Training neural net (pass $x)"
 
-    mdl=$dir/$x.mdl
-    if [ $x -eq 0 ]; then
-      # on iteration zero, use a smaller minibatch
+    # If num_additional_hidden_layers > 0, add a layer before 1st iter.
+    # This is because the affine before Softmax will be randomized anyway.
+    if [ $x -le $[($num_additional_hidden_layers - 1) * $add_layers_period] ] && \
+      [ $[$x % $add_layers_period] -eq 0 ]; then
+      mdl="nnet-init --srand=$x $hidden_config - | nnet-insert $dir/$x.mdl - - |"
+
+    else
+      mdl=$dir/$x.mdl
+    fi
+    if [ $x -eq 0 ] || [ "$mdl" != "$dir/$x.mdl" ]; then
+      # on iteration zero or when we just added a layer, use a smaller minibatch
       # size and just one job: the model-averaging doesn't seem to be helpful
       # when the model is changing too fast (i.e. it worsens the objective
       # function), and the smaller minibatch size will help to keep
