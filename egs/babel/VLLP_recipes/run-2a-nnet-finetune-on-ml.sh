@@ -2,6 +2,9 @@
 # The input feature can be raw or lda (set by feat_type).
 # If raw, set splice_width to 5 or 6
 
+. conf/common_vars.sh
+. ./lang.conf
+
 train_stage=-100
 mldir=../204VLLP.new/exp/dnn_scratch_6langFLPNN.raw
 
@@ -14,6 +17,9 @@ ali_model=exp/tri6b_nnet/
 ali_model_transform_dir=exp/tri5_ali
 
 finetune_type=whole # whole/softmax/ensemble
+num_additional_hidden_layers=0
+hidden_config=
+
 bnf_weight_threshold=0.7
 weights_dir=exp_bnf_semisup/best_path_weights/unsup.seg/decode_unsup.seg/
 ## Options for get_egs2 ########
@@ -21,10 +27,7 @@ get_egs_stage=-10
 io_opts="-tc 5" # for jobs with a lot of I/O, limits the number running at one time.   These don't
 ################################
 
-. conf/common_vars.sh
-. ./lang.conf
-
-# This parameter will be used when the training dies at a certain point.
+echo "$0 $@"
 . ./utils/parse_options.sh
 
 set -e
@@ -108,12 +111,18 @@ else
         --stage $train_stage --mix-up $dnn_mixup \
         --initial-learning-rate $dnn_init_learning_rate \
         --final-learning-rate $dnn_final_learning_rate \
+        --num-additional-hidden-layers $num_additional_hidden_layers \
+        --hidden-config "$hidden_config" \
         --cmd "$train_cmd" $egs_string \
         "${dnn_gpu_parallel_opts[@]}" \
         data/train data/lang $ali_dir $dir/input.mdl $dir || exit 1
       ;;
     ensemble)
       # Unlike non-ensemble training , here reinitialization will be done in the training script
+      if [ $num_additional_hidden_layers -gt 0 ]; then
+        echo "Ensemble fine tuning with additional hidden layers is not supported yet."
+        exit 1;
+      fi
       czpScripts/nnet2/train_pnorm_ensemble_continue.sh \
         --feat-type $feat_type --splice-width $splice_width \
         --transform-dir exp/tri5_ali \
