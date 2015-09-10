@@ -82,6 +82,7 @@ max_change_per_sample=0.075
 precondition_rank_in=20  # relates to online preconditioning
 precondition_rank_out=80 # relates to online preconditioning
 
+do_lda=false
 add_layers_period=2 # by default, add new layers every 2 iterations.
 num_hidden_layers=3
 bias_stddev=0.5
@@ -201,6 +202,14 @@ feat_dim=$(cat ${egs_dir[0]}/feat_dim) || exit 1;
 
 if [ $stage -le -5 ]; then
   echo "$0: initializing neural net";
+  if $do_lda; then
+    lda_mat=$dir/lda.mat
+    lda_dim=$(cat $dir/lda_dim) || exit 1;
+    if [ ! -f $lda_mat ]; then
+      echo "Cannot find LDA file $lda_mat, but do_lda is set to true."
+      exit 1;
+    fi
+  fi
   tot_input_dim=$feat_dim
 
   online_preconditioning_opts="alpha=$alpha num-samples-history=$num_samples_history update-period=$update_period rank-in=$precondition_rank_in rank-out=$precondition_rank_out max-change-per-sample=$max_change_per_sample"
@@ -209,7 +218,19 @@ if [ $stage -le -5 ]; then
   splice_output_dim=`perl -e "print (( $splice_width *2+1) * $tot_input_dim );"`
   cat >$dir/nnet.config <<EOF
 SpliceComponent input-dim=$tot_input_dim left-context=$splice_width right-context=$splice_width const-component-dim=0
-AffineComponentPreconditionedOnline input-dim=$splice_output_dim output-dim=$pnorm_input_dim $online_preconditioning_opts learning-rate=$initial_learning_rate param-stddev=$stddev bias-stddev=$bias_stddev
+EOF
+
+  if $do_lda; then
+    layer1_input_dim=$lda_dim
+    cat >>$dir/nnet.config <<EOF
+FixedAffineComponent matrix=$lda_mat
+EOF
+  else
+    layer1_input_dim=$splice_output_dim
+  fi
+
+  cat >>$dir/nnet.config <<EOF
+AffineComponentPreconditionedOnline input-dim=$layer1_input_dim output-dim=$pnorm_input_dim $online_preconditioning_opts learning-rate=$initial_learning_rate param-stddev=$stddev bias-stddev=$bias_stddev
 PnormComponent input-dim=$pnorm_input_dim output-dim=$pnorm_output_dim p=$p
 NormalizeComponent dim=$pnorm_output_dim
 AffineComponentPreconditionedOnline input-dim=$pnorm_output_dim output-dim=$alidir0_pdfs $online_preconditioning_opts learning-rate=$initial_learning_rate param-stddev=0 bias-stddev=0

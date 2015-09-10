@@ -967,13 +967,54 @@ fi
 
 ####################################################################
 ##
+## DNN ("compatibility") decoding -- also, just decode the "default" net
+##
+####################################################################
+tri6_nnet_suffix=".raw"
+if [[ "$sys_to_decode" =~ " tri6_nnet${tri6_nnet_suffix} " ]] || [[ "$sys_to_decode" =~ " exp/tri6_nnet${tri6_nnet_suffix} " ]]; then
+  if [ -f exp/tri6_nnet${tri6_nnet_suffix}/.done ]; then
+    decode=exp/tri6_nnet${tri6_nnet_suffix}/decode_${dataset_id}${ext_suffix}
+    if [ ! -z $beam_suffix ]; then
+      conf_beam=$conf_dnn_beam         # beam settings in conf file of this model
+      conf_lat_beam=$conf_dnn_lat_beam # beam settings in conf file of this model
+      . czpScripts/clips/decode/determine_decode_dir.sh
+      dnn_beam=$extra_beam
+      dnn_lat_beam=$extra_lattice_beam
+    fi
+    if [ ! -f $decode/.done ]; then
+      mkdir -p $decode
+      steps/nnet2/decode.sh \
+        --feat-type raw \
+        --minimize $minimize --cmd "$decode_cmd" --nj $my_nj \
+        --beam $dnn_beam --lattice-beam $dnn_lat_beam \
+        --skip-scoring true "${decode_extra_opts[@]}" \
+        exp/tri5/graph${ext_suffix} ${dataset_dir} $decode | tee $decode/decode.log
+
+      touch $decode/.done
+    fi
+    if [[ "$sys_to_kws_stt" =~ " tri6_nnet${tri6_nnet_suffix} " ]] || [[ "$sys_to_kws_stt" =~ " exp/tri6_nnet${tri6_nnet_suffix} " ]]; then
+      eval "(
+      czpScripts/local/run_kws_stt_task.chenzp.sh --cer $cer --max-states $max_states \
+        --basic-kws $basic_kws --subset-kws $subset_kws --ive-kws $ive_kws --oov-kws $oov_kws \
+        --ext-lexicon \"${ext_lex}\" --ext-pron \"${ext_pron}\" \
+        --skip-scoring $skip_scoring --extra-kws $extra_kws --wip $wip \
+        --cmd \"$decode_cmd\" --skip-kws $skip_kws --skip-stt $skip_stt  \
+        "${shadow_set_extra_opts[@]}" "${lmwt_dnn_extra_opts[@]}" \
+        ${dataset_dir} data/lang${ext_suffix} $decode
+      ) $bg_flag"
+    fi
+  fi
+fi
+
+####################################################################
+##
 ## DNN ("Multi-lang", CE) final tuning (*_cont) decoding (RAW feature)
 ##
 ####################################################################
 if [[ "$sys_to_decode" =~ " ml_dnn " ]]; then
-  suffixes='scratch_rand_5hid.raw_cont'
+  suffixes='scratch_4lang10hr_5hid.raw_lda104LLP_cont'
   if $multilang_test; then 
-    suffixes="$suffixes scratch_5lang80hr_5hid_mix10k_3k.raw_cont_30ep"
+    suffixes="$suffixes "
   fi
   for suffix in $suffixes; do
     if [ -f exp/dnn_${suffix}/.done ]; then

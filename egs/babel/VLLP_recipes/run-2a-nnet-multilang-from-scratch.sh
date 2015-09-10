@@ -14,6 +14,10 @@ train_stage=-5
 
 finetune=false
 ensemble_finetune=true
+## Options for LDA ######
+use_lda=    # existing lda.mat path
+lda_type=   # all/allphone/cluster/none
+lda_opts=
 ## Options for get_egs2 ########
 get_egs_stage=0
 io_opts="-tc 5" # for jobs with a lot of I/O, limits the number running at one time.   These don't
@@ -52,6 +56,39 @@ get_egs_extra_opts+=(--right-context $splice_width)
 [ ! -z "$feat_type" ] && get_egs_extra_opts+=($feat_opts)
 [ ! -z "$online_ivector_dir" ] && get_egs_extra_opts+=(--online-ivector-dir $online_ivector_dir)
 
+mkdir -p $dir
+if [ ! -z "$lda_type" ] && [ "$lda_type" != none ]; then
+  do_lda=true
+  if [ ! -f $dir/.done.lda ]; then
+    if [ ! -z $use_lda ]; then
+      echo "$0: use existing LDA file: $use_lda"
+      if [ ! -f $use_lda ]; then
+        echo "lda file '$use_lda' does not exist."
+        exit 1;
+      fi
+      lda_dir=`dirname $use_lda`
+      ln -sf $(readlink -f $use_lda) $dir/lda.mat
+      ln -sf $(readlink -f $lda_dir)/lda_dim $dir/lda_dim
+    else
+      echo "$0: calling get_multilang_lda.sh"
+      # TODO Train LDA
+      lda_multilang_opt=
+      for l in $langres; do
+        egs_dir=${mlresource[$l]}${egs_suffix}
+        lroot=$(dirname `dirname $egs_dir`)
+        alidir=$lroot/$ali_for_egs
+        lda_multilang_opt="$lda_multilang_opt $lroot $alidir"
+      done 
+      czpScripts/nnet2/get_multilang_lda.sh $lda_opts "${get_egs_extra_opts[@]}" \
+        --lda-type $lda_type --transform-dir tri5_ali --cmd "$train_cmd" \
+        $lda_multilang_opt $dir || exit 1;
+    fi
+    touch $dir/.done.lda
+  fi
+else
+  do_lda=false
+fi
+
 set +u
 # Get egs for all background languages
 multilang_opt=
@@ -88,6 +125,7 @@ if [ ! -f $dir/.done ]; then
   czpScripts/nnet2/train_pnorm_multilang_from_scratch.sh \
     --stage $train_stage --mix-up "$ml_mixup" --num-epochs $ml_num_epochs \
     --splice-width $splice_width \
+    --do-lda $do_lda \
     --initial-learning-rate $dnn_init_learning_rate \
     --final-learning-rate $dnn_final_learning_rate \
     --num-hidden-layers $dnn_multilang_num_hidden_layers \

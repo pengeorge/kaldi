@@ -70,6 +70,7 @@ if $semisupervised ; then
   [ ! -d data/${unsupid} ] && echo "Error: data/${unsupid} is not available!" && exit 1;
   echo "$0: Generate examples using unsupervised data in $dir"
   if [ ! -f $dir/egs/.done ]; then
+    # Options transform-dir-(un)sup is only relevant to "raw" features
     ./czpScripts/nnet2/get_egs_semi_supervised.chenzp.sh \
       --cmd "$train_cmd" --stage $get_egs_stage \
       "${dnn_update_egs_opts[@]}" \
@@ -105,6 +106,7 @@ else
   # do fine-tuning
   case $finetune_type in
     whole|last)
+      # Options transform-dir is only relevant to "raw" features
       czpScripts/nnet2/train_pnorm_fast_continue.sh \
         --feat-type $feat_type --splice-width $splice_width \
         --transform-dir exp/tri5_ali \
@@ -123,6 +125,7 @@ else
         echo "Ensemble fine tuning with additional hidden layers is not supported yet."
         exit 1;
       fi
+      # Options transform-dir is only relevant to "raw" features
       czpScripts/nnet2/train_pnorm_ensemble_continue.sh \
         --feat-type $feat_type --splice-width $splice_width \
         --transform-dir exp/tri5_ali \
