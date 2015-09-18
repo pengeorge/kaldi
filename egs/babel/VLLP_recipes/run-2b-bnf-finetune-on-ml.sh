@@ -54,7 +54,7 @@ else
 fi
 
 for d in $exp_dir $data_bnf_dir $param_bnf_dir; do
-  if [ ! -d $exp_dir ]; then
+  if [ ! -d $d ]; then
     remote_d=~/kaldi_exp_${server}/$(basename `pwd`)/$d
     mkdir -p $remote_d
     ln -s $remote_d

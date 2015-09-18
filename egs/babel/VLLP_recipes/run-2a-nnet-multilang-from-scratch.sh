@@ -5,7 +5,7 @@
 mlsuffix=scratch_6langFLPNN.raw
 langres='101N 104N 105N 106N 107N 204N'
 num_jobs_nnet='2 2 2 2 2 2'
-ml_mixup='5000 5000 5000 5000 5000 5000'
+ml_mixup='10000 10000 10000 10000 10000 10000'
 ml_num_epochs=10
 ali_for_egs=exp/tri6b_nnet_ali
 

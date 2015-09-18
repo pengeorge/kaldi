@@ -58,6 +58,7 @@ stage=-5
 io_opts="-tc 5" # for jobs with a lot of I/O, limits the number running at one time.   These don't
 splice_width=4 # meaning +- 4 frames on each side for second LDA
 do_lda=true
+feat_type=  # Can be used to force "raw" features.
 randprune=4.0 # speeds up LDA.
 alpha=4.0
 max_change=10.0
@@ -156,6 +157,9 @@ mkdir -p $dir/log
 splice_opts=`cat $alidir/splice_opts 2>/dev/null`
 cp $alidir/final.mat $dir 2>/dev/null
 cp $alidir/splice_opts $dir 2>/dev/null
+extra_opts=()
+[ ! -z "$feat_type" ] && extra_opts+=(--feat-type $feat_type)
+extra_opts+=(--splice-width $splice_width)
 cmvn_opts=`cat $alidir/cmvn_opts 2>/dev/null`
 cp $alidir/cmvn_opts $dir 2>/dev/null
 cp $alidir/tree $dir
@@ -164,7 +168,7 @@ if $do_lda; then
   truncate_comp_num=$[2*$num_hidden_layers+1]
   if [ $stage -le -4 ]; then
     echo "$0: calling get_lda.sh"
-    steps/nnet2/get_lda.sh $lda_opts --splice-width $splice_width --cmd "$cmd" $data $lang $alidir $dir || exit 1;
+    steps/nnet2/get_lda.sh $lda_opts "${extra_opts[@]}" --cmd "$cmd" $data $lang $alidir $dir || exit 1;
   fi
   if [ -z "$lda_dim" ]; then
     lda_dim=`cat $dir/lda_dim` || exit 1;
@@ -176,11 +180,15 @@ fi
 if [ $stage -le -3 ] && [ -z "$egs_dir" ]; then
   echo "$0: calling get_egs.sh"
   [ ! -z $transform_dir ] && $transform_dir_opt="--transform-dir $transform_dir";
-  czpScripts/nnet2/get_egs.get_feat_dim.sh $transform_dir_opt --samples-per-iter $samples_per_iter \
-      --num-jobs-nnet $num_jobs_nnet --splice-width $splice_width --stage $get_egs_stage \
+  czpScripts/nnet2/get_egs.get_feat_dim.sh "${extra_opts[@]}" $transform_dir_opt --samples-per-iter $samples_per_iter \
+      --num-jobs-nnet $num_jobs_nnet --stage $get_egs_stage \
       --cmd "$cmd" $egs_opts --io-opts "$io_opts" \
       $data $lang $alidir $dir || exit 1;
-  echo $transform_dir > $dir/transform_dir
+  # Useful transform_dir is written in file (already done in get_egs.get_feat_dim.sh)
+  #if [ -f $transform_dir/trans.1 ] && [ $feat_type != "raw" ] ||
+  #   [ -f $transform_dir/raw_trans.1 ] && [ $feat_type == "raw" ]; then
+  #  echo $transform_dir > $dir/transform_dir
+  #fi
 fi
 
 # these files will have been written by get_lda.sh/get_egs.get_feat_dim.sh

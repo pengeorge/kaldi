@@ -139,12 +139,14 @@ if [ -f $transform_dir/trans.1 ] && [ $feat_type != "raw" ]; then
   feats="$feats transform-feats --utt2spk=ark:$sdata/JOB/utt2spk ark:$transform_dir/trans.JOB ark:- ark:- |"
   valid_feats="$valid_feats transform-feats --utt2spk=ark:$data/utt2spk 'ark:cat $transform_dir/trans.*|' ark:- ark:- |"
   train_subset_feats="$train_subset_feats transform-feats --utt2spk=ark:$data/utt2spk 'ark:cat $transform_dir/trans.*|' ark:- ark:- |"
+  echo $transform_dir > $dir/transform_dir
 fi
 if [ -f $transform_dir/raw_trans.1 ] && [ $feat_type == "raw" ]; then
   echo "$0: using raw-fMLLR transforms from $transform_dir"
   feats="$feats transform-feats --utt2spk=ark:$sdata/JOB/utt2spk ark:$transform_dir/raw_trans.JOB ark:- ark:- |"
   valid_feats="$valid_feats transform-feats --utt2spk=ark:$data/utt2spk 'ark:cat $transform_dir/raw_trans.*|' ark:- ark:- |"
   train_subset_feats="$train_subset_feats transform-feats --utt2spk=ark:$data/utt2spk 'ark:cat $transform_dir/raw_trans.*|' ark:- ark:- |"
+  echo $transform_dir > $dir/transform_dir
 fi
 if [ ! -z "$online_ivector_dir" ]; then
   feats_one="$(echo "$feats" | sed s:JOB:1:g)"

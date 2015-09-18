@@ -929,10 +929,12 @@ done
 ## DNN ("compatibility") decoding -- also, just decode the "default" net
 ##
 ####################################################################
-if [[ "$sys_to_decode" =~ " tri6_nnet " ]] || [[ "$sys_to_decode" =~ " exp/tri6_nnet " ]]; then
-  if [ `basename $(readlink -f exp/tri6_nnet)` != "tri6b_nnet" ] \
-     && [ -f exp/tri6_nnet/.done ]; then
-    decode=exp/tri6_nnet/decode_${dataset_id}${ext_suffix}
+tri6_nnet_suffixes="_3hid"
+for tri6_nnet_suffix in '' $tri6_nnet_suffixes; do
+if [[ "$sys_to_decode" =~ " tri6_nnet${tri6_nnet_suffix} " ]] || [[ "$sys_to_decode" =~ " exp/tri6_nnet${tri6_nnet_suffix} " ]]; then
+  if [ `basename $(readlink -f exp/tri6_nnet${tri6_nnet_suffix})` != "tri6b_nnet" ] \
+     && [ -f exp/tri6_nnet${tri6_nnet_suffix}/.done ]; then
+    decode=exp/tri6_nnet${tri6_nnet_suffix}/decode_${dataset_id}${ext_suffix}
     if [ ! -z $beam_suffix ]; then
       conf_beam=$conf_dnn_beam         # beam settings in conf file of this model
       conf_lat_beam=$conf_dnn_lat_beam # beam settings in conf file of this model
@@ -951,7 +953,7 @@ if [[ "$sys_to_decode" =~ " tri6_nnet " ]] || [[ "$sys_to_decode" =~ " exp/tri6_
 
       touch $decode/.done
     fi
-    if [[ "$sys_to_kws_stt" =~ " tri6_nnet " ]] || [[ "$sys_to_kws_stt" =~ " exp/tri6_nnet " ]]; then
+    if [[ "$sys_to_kws_stt" =~ " tri6_nnet${tri6_nnet_suffix} " ]] || [[ "$sys_to_kws_stt" =~ " exp/tri6_nnet${tri6_nnet_suffix} " ]]; then
       eval "(
       czpScripts/local/run_kws_stt_task.chenzp.sh --cer $cer --max-states $max_states \
         --basic-kws $basic_kws --subset-kws $subset_kws --ive-kws $ive_kws --oov-kws $oov_kws \
@@ -964,16 +966,18 @@ if [[ "$sys_to_decode" =~ " tri6_nnet " ]] || [[ "$sys_to_decode" =~ " exp/tri6_
     fi
   fi
 fi
+done
 
 ####################################################################
 ##
 ## DNN ("compatibility") decoding -- also, just decode the "default" net
 ##
 ####################################################################
-tri6_nnet_suffix=".raw"
-if [[ "$sys_to_decode" =~ " tri6_nnet${tri6_nnet_suffix} " ]] || [[ "$sys_to_decode" =~ " exp/tri6_nnet${tri6_nnet_suffix} " ]]; then
-  if [ -f exp/tri6_nnet${tri6_nnet_suffix}/.done ]; then
-    decode=exp/tri6_nnet${tri6_nnet_suffix}/decode_${dataset_id}${ext_suffix}
+tri6_nnet_raw_suffixes=
+for tri6_nnet_suffix in '' $tri6_nnet_raw_suffixes; do
+if [[ "$sys_to_decode" =~ " tri6_nnet.raw${tri6_nnet_suffix} " ]] || [[ "$sys_to_decode" =~ " exp/tri6_nnet.raw${tri6_nnet_suffix} " ]]; then
+  if [ -f exp/tri6_nnet.raw${tri6_nnet_suffix}/.done ]; then
+    decode=exp/tri6_nnet.raw${tri6_nnet_suffix}/decode_${dataset_id}${ext_suffix}
     if [ ! -z $beam_suffix ]; then
       conf_beam=$conf_dnn_beam         # beam settings in conf file of this model
       conf_lat_beam=$conf_dnn_lat_beam # beam settings in conf file of this model
@@ -992,7 +996,7 @@ if [[ "$sys_to_decode" =~ " tri6_nnet${tri6_nnet_suffix} " ]] || [[ "$sys_to_dec
 
       touch $decode/.done
     fi
-    if [[ "$sys_to_kws_stt" =~ " tri6_nnet${tri6_nnet_suffix} " ]] || [[ "$sys_to_kws_stt" =~ " exp/tri6_nnet${tri6_nnet_suffix} " ]]; then
+    if [[ "$sys_to_kws_stt" =~ " tri6_nnet.raw${tri6_nnet_suffix} " ]] || [[ "$sys_to_kws_stt" =~ " exp/tri6_nnet.raw${tri6_nnet_suffix} " ]]; then
       eval "(
       czpScripts/local/run_kws_stt_task.chenzp.sh --cer $cer --max-states $max_states \
         --basic-kws $basic_kws --subset-kws $subset_kws --ive-kws $ive_kws --oov-kws $oov_kws \
@@ -1005,6 +1009,7 @@ if [[ "$sys_to_decode" =~ " tri6_nnet${tri6_nnet_suffix} " ]] || [[ "$sys_to_dec
     fi
   fi
 fi
+done
 
 ####################################################################
 ##
@@ -1012,7 +1017,7 @@ fi
 ##
 ####################################################################
 if [[ "$sys_to_decode" =~ " ml_dnn " ]]; then
-  suffixes='scratch_4lang10hr_5hid.raw_lda104LLP_cont'
+  suffixes='scratch_4lang10hr_5hid.raw_cont_last'
   if $multilang_test; then 
     suffixes="$suffixes "
   fi

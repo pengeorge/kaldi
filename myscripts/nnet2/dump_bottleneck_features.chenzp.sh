@@ -86,11 +86,11 @@ case $feat_type in
   *) echo "Invalid feature type $feat_type" && exit 1;
 esac
 
-if [ `cat $nnetdir/transform_dir | wc -w` -eq 0 ] && [ ! -z "$transform_dir" ]; then
+if [ ! `cat $nnetdir/transform_dir 2>/dev/null | wc -w` -gt 0 ] && [ ! -z "$transform_dir" ]; then
   echo "$0: The input feats of BNF have no transform_dir, but you specify as $transform_dir"
   exit 1;
 fi
-if [ `cat $nnetdir/transform_dir | wc -w` -gt 0 ] && [ -z "$transform_dir" ]; then
+if [ `cat $nnetdir/transform_dir 2>/dev/null | wc -w` -gt 0 ] && [ -z "$transform_dir" ]; then
   echo "$0: The input feats of BNF have transform_dir, but you didn't specify here."
   exit 1;
 fi

@@ -12,11 +12,11 @@ semisupervised=false
 unsupid=unsup.seg
 suffix=
 
-ali_dir=exp/tri6_nnet_ali
-ali_model=exp/tri6b_nnet/
+ali_dir=exp/tri5_ali
+ali_model=exp/tri5/
 ali_model_transform_dir=exp/tri5_ali
 
-finetune_type=whole # whole/softmax/ensemble
+finetune_type=whole # whole/last/ensemble
 num_additional_hidden_layers=0
 hidden_config=
 
@@ -35,7 +35,7 @@ set -o pipefail
 set -u
 
 input_model=$mldir/0/final.mdl
-dir=exp/`basename $mldir`_cont  # Working directory
+dir=exp/`basename $mldir`_cont # Working directory
 case $finetune_type in
   ensemble)
     dir=${dir}_en
@@ -66,6 +66,8 @@ if [ ! -f $ali_dir/.done ]; then
 fi
 feat_type=`cat $mldir/feat_type`
 splice_width=`cat $mldir/splice_width`
+
+
 if $semisupervised ; then
   [ ! -d data/${unsupid} ] && echo "Error: data/${unsupid} is not available!" && exit 1;
   echo "$0: Generate examples using unsupervised data in $dir"

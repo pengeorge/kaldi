@@ -13,6 +13,11 @@ set -o pipefail  #Exit if any of the commands in the pipeline will
 . ./lang.conf || exit 1;
 
 set -u           #Fail on an undefined variable
+
+do_lda=true
+lda_opts=
+bnf_nnet_only=true
+
 semisupervised=true
 unsup_string="_semisup"
 suffix=
@@ -23,8 +28,6 @@ bnf_weight_threshold=0.35 # this would override conf in dnn_update_egs_opts only
 ali_dir=
 ali_model=exp/tri6_nnet/
 weights_dir=exp_bnf${unsup_string}/best_path_weights/unsup.seg/decode_unsup.seg/
-
-do_lda=true
 
 . ./utils/parse_options.sh
 
@@ -43,10 +46,16 @@ else
   dirid=train
 fi
 
+if ! $do_lda; then
+  suffix=.no_lda${suffix}
+fi
+
+train_script=czpScripts/nnet2/train_tanh_bottleneck.chenzp.sh
+
 datadir=data/${dirid}
-exp_dir=exp_bnf${unsup_string}${suffix}
-data_bnf_dir=data_bnf${unsup_string}${suffix}
-param_bnf_dir=param_bnf${unsup_string}${suffix}
+exp_dir=exp_bnf${unsup_string}.raw${suffix}
+data_bnf_dir=data_bnf${unsup_string}.raw${suffix}
+param_bnf_dir=param_bnf${unsup_string}.raw${suffix}
 
 if [ -z $ali_dir ] ; then
   # If alignment directory is not done, use exp/tri6_nnet_ali as alignment 
@@ -72,6 +81,8 @@ fi
 mkdir -p $exp_dir/tri6_bnf  
 if [ ! -f $exp_dir/tri6_bnf/.done ]; then    
   if $semisupervised ; then
+    echo "semisupervised=true is not supported yet in raw feat case"
+    exit 1
 
     [ ! -d $datadir ] && echo "Error: $datadir is not available!" && exit 1;
     echo "$0: Generate examples in $exp_dir/tri6_bnf using unsupervised data"
@@ -91,8 +102,9 @@ if [ ! -f $exp_dir/tri6_bnf/.done ]; then
 
  echo "$0: Train Bottleneck network"
   # --transform-dir exp/tri5_ali is only used when egs is not ready, which means fully-supervised case
-  czpScripts/nnet2/train_tanh_bottleneck.chenzp.sh \
-    --do-lda $do_lda \
+  $train_script \
+    --feat-type raw --splice-width 6 \
+    --do-lda $do_lda --lda-opts "$lda_opts" \
     --stage $bnf_train_stage --num-jobs-nnet $bnf_num_jobs \
     --transform-dir "$transform_dir" \
     --num-threads $bnf_num_threads --mix-up $bnf_mixup \
@@ -106,6 +118,11 @@ if [ ! -f $exp_dir/tri6_bnf/.done ]; then
     data/train data/lang $ali_dir $exp_dir/tri6_bnf || exit 1
 
   touch $exp_dir/tri6_bnf/.done
+fi
+
+if $bnf_nnet_only; then
+  echo "Exit as bnf_nnet_only is true"
+  exit 0;
 fi
 
 [ ! -d $param_bnf_dir ] && mkdir -p $param_bnf_dir
