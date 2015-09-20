@@ -24,6 +24,7 @@
 #include <iterator>
 #include <sstream>
 #include "nnet2/nnet-component.h"
+#include "nnet2/nnet-component-ext.h"
 #include "nnet2/nnet-precondition.h"
 #include "nnet2/nnet-precondition-online.h"
 #include "util/stl-utils.h"
@@ -74,6 +75,18 @@ Component* Component::NewComponentOfType(const std::string &component_type) {
     ans = new ScaleComponent();
   } else if (component_type == "AffineComponent") {
     ans = new AffineComponent();
+  } else if (component_type == "AffineComponentExt") {
+    ans = new AffineComponentExt();
+  } else if (component_type == "FixedAffineComponentExt") {
+    ans = new FixedAffineComponentExt();
+  } else if (component_type == "VectorMixComponent") {
+    ans = new VectorMixComponent();
+  } else if (component_type == "TanhComponentExt") {
+    ans = new TanhComponentExt();
+  } else if (component_type == "PnormComponentExt") {
+    ans = new PnormComponentExt();
+  } else if (component_type == "NormalizeComponentExt") {
+    ans = new NormalizeComponentExt();
   } else if (component_type == "AffineComponentPreconditioned") {
     ans = new AffineComponentPreconditioned();
   } else if (component_type == "AffineComponentPreconditionedOnline") {

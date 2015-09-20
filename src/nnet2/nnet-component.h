@@ -385,6 +385,7 @@ class NonlinearComponent: public Component {
   friend class NormalizationComponent;
   friend class SigmoidComponent;
   friend class TanhComponent;
+  friend class TanhComponentExt;
   friend class SoftmaxComponent;
   friend class LogSoftmaxComponent;
   friend class RectifiedLinearComponent;
