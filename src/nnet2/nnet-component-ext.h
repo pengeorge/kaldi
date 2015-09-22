@@ -38,22 +38,31 @@
 namespace kaldi {
 namespace nnet2 {
 
+/*
+class WithConstComponent {
+ public:
+   WithConstComponent(int32 const_dim = 0):const_dim_(const_dim) { };
+  virtual void ResetConst(int32 const_dim = 0) {const_dim_ = const_dim; };
+ protected:
+  int32 const_dim_;
+};*/
+
 class VectorMixComponent: public UpdatableComponent {
  public:
-  virtual int32 InputDim() const { return block_dim_ * num_blocks_ + const_component_dim_; }
-  virtual int32 OutputDim() const { return block_dim_ + const_component_dim_; }
+  virtual int32 InputDim() const { return block_dim_ * num_blocks_ + const_dim_; }
+  virtual int32 OutputDim() const { return block_dim_ + const_dim_; }
   virtual int32 GetParameterDim() const;
   virtual void Vectorize(VectorBase<BaseFloat> *params) const;
   virtual void UnVectorize(const VectorBase<BaseFloat> &params);
-  virtual void ResetConst(int32 const_component_dim = 0) {const_component_dim_ = const_component_dim;};
 
   // Note: num_blocks must divide input_dim.
   void Init(BaseFloat learning_rate, int32 block_dim,
                     BaseFloat param_stddev, BaseFloat bias_stddev,
-                    int32 num_blocks, int32 const_component_dim = 0);
+                    int32 num_blocks, int32 const_dim = 0);
   virtual void InitFromString(std::string args);
   
   VectorMixComponent() { } // use Init to really initialize.
+  virtual void ResetConst(int32 const_dim = 0) {const_dim_ = const_dim; };
   virtual std::string Type() const { return "VectorMixComponent"; }
   virtual bool BackpropNeedsInput() const { return true; }
   virtual bool BackpropNeedsOutput() const { return false; }
@@ -77,6 +86,7 @@ class VectorMixComponent: public UpdatableComponent {
   virtual void PerturbParams(BaseFloat stddev);
   virtual void Scale(BaseFloat scale);
   virtual void Add(BaseFloat alpha, const UpdatableComponent &other);
+  virtual std::string Info() const;
  protected:
   virtual void Update(
       const CuMatrixBase<BaseFloat> &in_value,
@@ -93,7 +103,7 @@ class VectorMixComponent: public UpdatableComponent {
   CuVector<BaseFloat> bias_params_;
   int32 num_blocks_;
   int32 block_dim_;
-  int32 const_component_dim_;
+  int32 const_dim_;
  private:
   KALDI_DISALLOW_COPY_AND_ASSIGN(VectorMixComponent);
 
@@ -107,18 +117,20 @@ class AffineComponentExt: public AffineComponent {
   // The next constructor is used in converting from nnet1.
   AffineComponentExt(const CuMatrixBase<BaseFloat> &linear_params,
                   const CuVectorBase<BaseFloat> &bias_params,
-                  BaseFloat learning_rate, int32 const_component_dim = 0);
-  virtual void ResetConst(int32 const_component_dim = 0) {const_component_dim_ = const_component_dim;};
-  virtual int32 InputDim() const { return linear_params_.NumCols() + const_component_dim_; }
-  virtual int32 OutputDim() const { return linear_params_.NumRows() + const_component_dim_; }
+                  BaseFloat learning_rate, int32 const_dim = 0);
+  virtual int32 InputDim() const { return linear_params_.NumCols() + const_dim_; }
+  virtual int32 OutputDim() const { return linear_params_.NumRows() + const_dim_; }
+  virtual void ResetConst(int32 const_dim = 0) {const_dim_ = const_dim; };
   void Init(BaseFloat learning_rate,
             int32 input_dim, int32 output_dim,
-            BaseFloat param_stddev, BaseFloat bias_stddev, int32 const_component_dim = 0);
+            BaseFloat param_stddev, BaseFloat bias_stddev, int32 const_dim = 0);
+  void Init(BaseFloat learning_rate,
+            std::string matrix_filename);
 
   virtual std::string Info() const;
   virtual void InitFromString(std::string args);
   
-  AffineComponentExt(): AffineComponent() { } // use Init to really initialize.
+  AffineComponentExt() { } // use Init to really initialize.
   virtual std::string Type() const { return "AffineComponentExt"; }
   using Component::Propagate; // to avoid name hiding
   virtual void Propagate(const ChunkInfo &in_info,
@@ -137,19 +149,12 @@ class AffineComponentExt: public AffineComponent {
   virtual Component* Copy() const;
   virtual void SetParams(const VectorBase<BaseFloat> &bias,
                          const MatrixBase<BaseFloat> &linear,
-                         int32 const_component_dim = 0);
+                         int32 const_dim = 0);
 
   virtual int32 GetParameterDim() const;
   virtual void Vectorize(VectorBase<BaseFloat> *params) const;
   virtual void UnVectorize(const VectorBase<BaseFloat> &params);
 
-  /// This function is implemented in widen-nnet.cc
-  void Widen(int32 new_dimension,
-             BaseFloat param_stddev,
-             BaseFloat bias_stddev,
-             std::vector<NonlinearComponent*> c2, // will usually have just one
-                                                  // element.
-             AffineComponent *c3);
  protected:
   // This function Update() is for extensibility; child classes may override this.
   virtual void Update(
@@ -164,7 +169,7 @@ class AffineComponentExt: public AffineComponent {
       const CuMatrixBase<BaseFloat> &out_deriv);  
 
   const AffineComponentExt &operator = (const AffineComponentExt &other); // Disallow.
-  int32 const_component_dim_;
+  int32 const_dim_;
 };
 
 /// FixedAffineComponentExt is an affine transform that is supplied
@@ -172,22 +177,19 @@ class AffineComponentExt: public AffineComponent {
 class FixedAffineComponentExt: public FixedAffineComponent {
  public:
   FixedAffineComponentExt() { } 
-  FixedAffineComponentExt(const FixedAffineComponent &base, int32 const_dim = 0) {
-    Init(base.LinearParams(), const_dim);
-  };
+  virtual void ResetConst(int32 const_dim = 0) {const_dim_ = const_dim; };
   virtual std::string Type() const { return "FixedAffineComponentExt"; }
   virtual std::string Info() const;
 
   /// matrix should be of size input-dim+1 to output-dim, last col is offset
-  void Init(const CuMatrixBase<BaseFloat> &matrix, int32 const_component_dim = 0); 
+  void Init(const CuMatrixBase<BaseFloat> &matrix, int32 const_dim = 0); 
 
   // InitFromString takes only the option matrix=<string>,
   // where the string is the filename of a Kaldi-format matrix to read.
   virtual void InitFromString(std::string args);
   
-  virtual void ResetConst(int32 const_component_dim = 0) {const_component_dim_ = const_component_dim;};
-  virtual int32 InputDim() const { return linear_params_.NumCols() + const_component_dim_; }
-  virtual int32 OutputDim() const { return linear_params_.NumRows() + const_component_dim_; }
+  virtual int32 InputDim() const { return linear_params_.NumCols() + const_dim_; }
+  virtual int32 OutputDim() const { return linear_params_.NumRows() + const_dim_; }
   using Component::Propagate; // to avoid name hiding
   virtual void Propagate(const ChunkInfo &in_info,
                          const ChunkInfo &out_info,
@@ -212,7 +214,7 @@ class FixedAffineComponentExt: public FixedAffineComponent {
   friend class AffineComponentExt;
   CuMatrix<BaseFloat> linear_params_;
   CuVector<BaseFloat> bias_params_;
-  int32 const_component_dim_;
+  int32 const_dim_;
   
   KALDI_DISALLOW_COPY_AND_ASSIGN(FixedAffineComponentExt);
 };
@@ -220,12 +222,13 @@ class FixedAffineComponentExt: public FixedAffineComponent {
 
 class TanhComponentExt: public TanhComponent {
  public:
-  explicit TanhComponentExt(int32 dim, int32 const_dim): TanhComponent(dim), const_dim_(const_dim) { }
-  explicit TanhComponentExt(const TanhComponentExt &other): TanhComponent(other) { }
-  explicit TanhComponentExt(const TanhComponent &other, int32 const_dim)
-    : TanhComponent(other), const_dim_(const_dim) { }
-  TanhComponentExt() : TanhComponent(), const_dim_(0) { }
-  virtual void ResetConst(int32 const_dim = 0) {const_dim_ = const_dim;};
+  TanhComponentExt(int32 dim, int32 const_dim): TanhComponent(dim), const_dim_(const_dim) { }
+  TanhComponentExt(const TanhComponentExt &other): TanhComponent(other), const_dim_(other.const_dim_) { }
+  TanhComponentExt(const TanhComponent &other, int32 const_dim = 0) {
+    Init(other.InputDim() + const_dim, const_dim);
+  }
+  TanhComponentExt() { }
+  virtual void ResetConst(int32 const_dim = 0) {dim_ += const_dim - const_dim_; const_dim_ = const_dim; };
   virtual std::string Type() const { return "TanhComponentExt"; }
   void Init(int32 dim, int32 const_dim) { dim_ = dim; const_dim_ = const_dim, count_ = 0.0; }
   virtual void InitFromString(std::string args); 
@@ -249,22 +252,33 @@ class TanhComponentExt: public TanhComponent {
   
   /// Write component to stream
   virtual void Write(std::ostream &os, bool binary) const;
+  virtual std::string Info() const;
+  virtual void UpdateStats(const CuMatrixBase<BaseFloat> &out_value,
+                   const CuMatrixBase<BaseFloat> *deriv);
  protected:
   int32 const_dim_;
  private:
   TanhComponentExt &operator = (const TanhComponentExt &other); // Disallow.
 };
 
+
 class PnormComponentExt: public PnormComponent {
  public:
   void Init(int32 input_dim, int32 output_dim, BaseFloat p, int32 const_dim = 0);
-  explicit PnormComponentExt(int32 input_dim, int32 output_dim, BaseFloat p, int32 const_dim = 0)
-    : PnormComponent(input_dim, output_dim, p), const_dim_(const_dim) {
+  explicit PnormComponentExt(int32 input_dim, int32 output_dim, BaseFloat p, int32 const_dim = 0) {
+    Init(input_dim, output_dim, p, const_dim);
   }
-  explicit PnormComponentExt(const PnormComponent &other, int32 const_dim)
-    : input_dim_(other.InputDim()), output_dim_(other.OutputDim()), const_dim_(const_dim) { }
   PnormComponentExt(): input_dim_(0), output_dim_(0), p_(0), const_dim_(0) { }
-  virtual void ResetConst(int32 const_dim = 0) {const_dim_ = const_dim;};
+  PnormComponentExt(const PnormComponentExt &other)
+    : input_dim_(other.input_dim_), output_dim_(other.output_dim_),
+      p_(other.p_), const_dim_(other.const_dim_) { }
+  //TODO how to copy "p" from PnormComponent without modifying class PnormComponent
+  PnormComponentExt(const PnormComponent &other, int32 const_dim = 0) {
+    Init(other.InputDim(), other.OutputDim(), 2, const_dim);
+  }
+//    : input_dim_(other.InputDim()), output_dim_(other.OutputDim()),
+//      p_(2), const_dim_(const_dim) { }
+  virtual void ResetConst(int32 const_dim = 0) {const_dim_ = const_dim; };
   virtual std::string Type() const { return "PnormComponentExt"; }
   virtual void InitFromString(std::string args); 
   virtual int32 InputDim() const { return input_dim_ + const_dim_; }
@@ -302,12 +316,14 @@ class PnormComponentExt: public PnormComponent {
 
 class NormalizeComponentExt: public NormalizeComponent {
  public:
-  explicit NormalizeComponentExt(int32 dim, int32 const_dim): NormalizeComponent(dim), const_dim_(const_dim) { }
-  explicit NormalizeComponentExt(const NormalizeComponentExt &other): NormalizeComponent(other) { }
-  explicit NormalizeComponentExt(const NormalizeComponent &other, int32 const_dim)
-    : NormalizeComponent(other), const_dim_(const_dim) { }
+  NormalizeComponentExt(int32 dim, int32 const_dim): NormalizeComponent(dim), const_dim_(const_dim) { }
+  NormalizeComponentExt(const NormalizeComponentExt &other)
+    : NormalizeComponent(other), const_dim_(other.const_dim_) { }
+  NormalizeComponentExt(const NormalizeComponent &other, int32 const_dim = 0) {
+    Init(other.InputDim() + const_dim, const_dim);
+  }
   NormalizeComponentExt() : NormalizeComponent(), const_dim_(0) { }
-  virtual void ResetConst(int32 const_dim = 0) {const_dim_ = const_dim;};
+  virtual void ResetConst(int32 const_dim = 0) {dim_ += const_dim - const_dim_; const_dim_ = const_dim; };
   virtual std::string Type() const { return "NormalizeComponentExt"; }
   void Init(int32 dim, int32 const_dim) { dim_ = dim; const_dim_ = const_dim; }
   virtual void InitFromString(std::string args); 
@@ -331,10 +347,11 @@ class NormalizeComponentExt: public NormalizeComponent {
   
   /// Write component to stream
   virtual void Write(std::ostream &os, bool binary) const;
+  virtual std::string Info() const;
  protected:
   int32 const_dim_;
  private:
-  NormalizeComponent &operator = (const NormalizeComponent &other); // Disallow.
+  NormalizeComponentExt &operator = (const NormalizeComponentExt &other); // Disallow.
   static const BaseFloat kNormFloor;
   // about 0.7e-20.  We need a value that's exactly representable in
   // float and whose inverse square root is also exactly representable

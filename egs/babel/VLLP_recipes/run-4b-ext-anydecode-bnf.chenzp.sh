@@ -19,7 +19,7 @@ run_kws_stt_bg=true
 # time-consuming lattice-to-ctm.
 # Available only when cmd is "queue.pl ..."
 
-mlsuffix=6langFLPNN.raw  #suffix for multilang, e.g. 6langFLPNN.raw_ft
+mlsuffix=_6langFLPNN.raw_ft  #suffix for multilang, e.g. 6langFLPNN.raw_ft
 
 kind=
 data_only=false
@@ -424,91 +424,93 @@ if [ -f $exp_dir/sgmm7/.done ]; then
   done
 fi
 
+suffixes='.fast'
+for suffix in '' $suffixes; do
+  if [ -f $exp_dir/tri7_nnet${suffix}/.done ]; then
+  #    [[ ( ! $exp_dir/tri7_nnet/decode_${dirid}/.done -nt $datadir/.done)  || \
+  #       (! $exp_dir/tri7_nnet/decode_${dirid}/.done -nt $exp_dir/tri7_nnet/.done ) ]]; then
+    
+    # Assuming tri6/graph${ext} has been built
 
-if [ -f $exp_dir/tri7_nnet/.done ]; then
-#    [[ ( ! $exp_dir/tri7_nnet/decode_${dirid}/.done -nt $datadir/.done)  || \
-#       (! $exp_dir/tri7_nnet/decode_${dirid}/.done -nt $exp_dir/tri7_nnet/.done ) ]]; then
-  
-  # Assuming tri6/graph${ext} has been built
+    decode=$exp_dir/tri7_nnet${suffix}/decode_${dirid}${ext}
+    if [ ! -z $beam_suffix ]; then
+      conf_beam=$conf_dnn_beam         # beam settings in conf file of this model
+      conf_lat_beam=$conf_dnn_lat_beam # beam settings in conf file of this model
+      . czpScripts/clips/decode/determine_decode_dir.sh
+      dnn_beam=$extra_beam
+      dnn_lat_beam=$extra_lattice_beam
+    fi
+    if [ ! -f $decode/.done ]; then
+      echo ---------------------------------------------------------------------
+      echo "Decoding hybrid system on top of bottleneck features on" `date`
+      echo ---------------------------------------------------------------------
 
-  decode=$exp_dir/tri7_nnet/decode_${dirid}${ext}
-  if [ ! -z $beam_suffix ]; then
-    conf_beam=$conf_dnn_beam         # beam settings in conf file of this model
-    conf_lat_beam=$conf_dnn_lat_beam # beam settings in conf file of this model
-    . czpScripts/clips/decode/determine_decode_dir.sh
-    dnn_beam=$extra_beam
-    dnn_lat_beam=$extra_lattice_beam
+      mkdir -p $decode
+      steps/nnet2/decode.sh --cmd "$decode_cmd" --nj $my_nj \
+        --acwt $bnf_decode_acwt \
+        --beam $dnn_beam --lattice-beam $dnn_lat_beam \
+        --skip-scoring true "${decode_extra_opts[@]}" \
+        --feat-type raw \
+        $exp_dir/tri6/graph${ext} ${datadir} $decode | tee $decode/decode.log
+
+      touch $decode/.done
+    fi
+
+    eval "(
+    for ive_type in $ive_types ; do
+      czpScripts/local/run_kws_stt_task.chenzp.sh --cer $cer --max-states $max_states \
+        --basic-kws $basic_kws --subset-kws $subset_kws --ive-kws $ive_kws --oov-kws $oov_kws \
+        --ive-type \"\$ive_type\" \
+        --ext-lexicon \"${ext_lex}\" --ext-pron \"${ext_pron}\" \
+        --skip-scoring $skip_scoring --extra-kws $extra_kws --wip $wip \
+        --cmd \"$decode_cmd\" --skip-kws $skip_kws --skip-stt $skip_stt \
+        "${shadow_set_extra_opts[@]}" "${lmwt_bnf_dnn_extra_opts[@]}" \
+        ${datadir} data/lang${ext} ${decode}
+    done
+    ) $bg_flag"
   fi
-  if [ ! -f $decode/.done ]; then
-    echo ---------------------------------------------------------------------
-    echo "Decoding hybrid system on top of bottleneck features on" `date`
-    echo ---------------------------------------------------------------------
-
-    mkdir -p $decode
-    steps/nnet2/decode.sh --cmd "$decode_cmd" --nj $my_nj \
-      --acwt $bnf_decode_acwt \
-      --beam $dnn_beam --lattice-beam $dnn_lat_beam \
-      --skip-scoring true "${decode_extra_opts[@]}" \
-      --feat-type raw \
-      $exp_dir/tri6/graph${ext} ${datadir} $decode | tee $decode/decode.log
-
-    touch $decode/.done
-  fi
-
-  eval "(
-  for ive_type in $ive_types ; do
-    czpScripts/local/run_kws_stt_task.chenzp.sh --cer $cer --max-states $max_states \
-      --basic-kws $basic_kws --subset-kws $subset_kws --ive-kws $ive_kws --oov-kws $oov_kws \
-      --ive-type \"\$ive_type\" \
-      --ext-lexicon \"${ext_lex}\" --ext-pron \"${ext_pron}\" \
-      --skip-scoring $skip_scoring --extra-kws $extra_kws --wip $wip \
-      --cmd \"$decode_cmd\" --skip-kws $skip_kws --skip-stt $skip_stt \
-      "${shadow_set_extra_opts[@]}" "${lmwt_bnf_dnn_extra_opts[@]}" \
-      ${datadir} data/lang${ext} ${decode}
-  done
-  ) $bg_flag"
-fi
+done
 
 ####################################################################
 ##
 ## LSTM decoding
 ##
 ####################################################################
-  for d in lstm4f ; do
-    mdldir=$exp_dir/$d
-    if [ -f $mdldir/.done ]; then
-      # decoding
-      decode=$mdldir/decode_${dirid}${ext}
-      if [ ! -z $beam_suffix ]; then
-        conf_beam=$conf_lstm_beam         # beam settings in conf file of this model
-        conf_lat_beam=$conf_lstm_lat_beam # beam settings in conf file of this model
-        . czpScripts/clips/decode/determine_decode_dir.sh
-        lstm_beam=$extra_beam
-        lstm_lat_beam=$extra_lattice_beam
-      fi
-      if [ ! -f $decode/.done ]; then
-        mkdir -p $decode
-        steps/nnet/decode.sh --nj $my_nj --cmd "$decode_cmd" --config conf/decode_lstm.config \
-          --beam $lstm_beam --lattice-beam $lstm_lat_beam \
-          --skip-scoring true "${decode_extra_opts[@]}" \
-          $exp_dir/tri6/graph${ext} $datadir $decode | tee $decode/decode.log
-        touch $decode/.done
-      fi
-
-      eval "(
-      for ive_type in $ive_types; do
-        czpScripts/local/run_kws_stt_task.chenzp.sh --cer $cer --max-states $max_states \
-          --basic-kws $basic_kws --subset-kws $subset_kws --ive-kws $ive_kws --oov-kws $oov_kws \
-          --ext-lexicon \"${ext_lex}\" --ext-pron \"${ext_pron}\" \
-          --ive-type \"\$ive_type\" \
-          --skip-scoring $skip_scoring --extra-kws $extra_kws --wip $wip \
-          --cmd \"$decode_cmd\" --skip-kws $skip_kws --skip-stt $skip_stt  \
-          "${shadow_set_extra_opts[@]}" "${lmwt_lstm_extra_opts[@]}" \
-          ${datadir} data/lang${ext} $decode
-      done
-      ) $bg_flag"
+for d in lstm4f ; do
+  mdldir=$exp_dir/$d
+  if [ -f $mdldir/.done ]; then
+    # decoding
+    decode=$mdldir/decode_${dirid}${ext}
+    if [ ! -z $beam_suffix ]; then
+      conf_beam=$conf_lstm_beam         # beam settings in conf file of this model
+      conf_lat_beam=$conf_lstm_lat_beam # beam settings in conf file of this model
+      . czpScripts/clips/decode/determine_decode_dir.sh
+      lstm_beam=$extra_beam
+      lstm_lat_beam=$extra_lattice_beam
     fi
-  done
+    if [ ! -f $decode/.done ]; then
+      mkdir -p $decode
+      steps/nnet/decode.sh --nj $my_nj --cmd "$decode_cmd" --config conf/decode_lstm.config \
+        --beam $lstm_beam --lattice-beam $lstm_lat_beam \
+        --skip-scoring true "${decode_extra_opts[@]}" \
+        $exp_dir/tri6/graph${ext} $datadir $decode | tee $decode/decode.log
+      touch $decode/.done
+    fi
+
+    eval "(
+    for ive_type in $ive_types; do
+      czpScripts/local/run_kws_stt_task.chenzp.sh --cer $cer --max-states $max_states \
+        --basic-kws $basic_kws --subset-kws $subset_kws --ive-kws $ive_kws --oov-kws $oov_kws \
+        --ext-lexicon \"${ext_lex}\" --ext-pron \"${ext_pron}\" \
+        --ive-type \"\$ive_type\" \
+        --skip-scoring $skip_scoring --extra-kws $extra_kws --wip $wip \
+        --cmd \"$decode_cmd\" --skip-kws $skip_kws --skip-stt $skip_stt  \
+        "${shadow_set_extra_opts[@]}" "${lmwt_lstm_extra_opts[@]}" \
+        ${datadir} data/lang${ext} $decode
+    done
+    ) $bg_flag"
+  fi
+done
 wait
 
 [ -e $lockfile ] && rm $lockfile

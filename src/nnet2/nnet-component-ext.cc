@@ -92,7 +92,7 @@ Component* VectorMixComponent::Copy() const {
   ans->bias_params_ = bias_params_;
   ans->num_blocks_ = num_blocks_;
   ans->block_dim_ = block_dim_;
-  ans->const_component_dim_ = const_component_dim_;
+  ans->const_dim_ = const_dim_;
   return ans;
 }
 
@@ -119,13 +119,13 @@ void VectorMixComponent::Propagate(const ChunkInfo &in_info,
   KALDI_ASSERT(in_info.NumChunks() == out_info.NumChunks());
 
   int32 num_frames = in.NumRows();
-  KALDI_ASSERT(in.NumCols() == block_dim_ * num_blocks_ + const_component_dim_);
-  KALDI_ASSERT(out->NumCols() == block_dim_ + const_component_dim_);
+  KALDI_ASSERT(in.NumCols() == block_dim_ * num_blocks_ + const_dim_);
+  KALDI_ASSERT(out->NumCols() == block_dim_ + const_dim_);
   KALDI_ASSERT(in.NumRows() == out->NumRows());
 
-  if (const_component_dim_ > 0) {
-    CuSubMatrix<BaseFloat> const_in(in, 0, num_frames, block_dim_ * num_blocks_, const_component_dim_);
-    CuSubMatrix<BaseFloat> const_out(*out, 0, num_frames, block_dim_, const_component_dim_);
+  if (const_dim_ > 0) {
+    CuSubMatrix<BaseFloat> const_in(in, 0, num_frames, block_dim_ * num_blocks_, const_dim_);
+    CuSubMatrix<BaseFloat> const_out(*out, 0, num_frames, block_dim_, const_dim_);
     const_out.CopyFromMat(const_in);
   }
   CuSubMatrix<BaseFloat> mix_out(*out, 0, num_frames, 0, block_dim_);
@@ -174,12 +174,12 @@ void VectorMixComponent::Backprop(const ChunkInfo &,  //in_info,
   VectorMixComponent *to_update = dynamic_cast<VectorMixComponent*>(
       to_update_in);
   in_deriv->Resize(out_deriv.NumRows(), InputDim());
-  KALDI_ASSERT(in_value.NumCols() == block_dim_ * num_blocks_ + const_component_dim_);
-  KALDI_ASSERT(out_deriv.NumCols() == block_dim_ + const_component_dim_);
+  KALDI_ASSERT(in_value.NumCols() == block_dim_ * num_blocks_ + const_dim_);
+  KALDI_ASSERT(out_deriv.NumCols() == block_dim_ + const_dim_);
 
-  if (const_component_dim_ > 0) {
-    CuSubMatrix<BaseFloat> const_out_deriv(out_deriv, 0, num_frames, block_dim_, const_component_dim_);
-    CuSubMatrix<BaseFloat> const_in_deriv(*in_deriv, 0, num_frames, block_dim_ * num_blocks_, const_component_dim_);
+  if (const_dim_ > 0) {
+    CuSubMatrix<BaseFloat> const_out_deriv(out_deriv, 0, num_frames, block_dim_, const_dim_);
+    CuSubMatrix<BaseFloat> const_in_deriv(*in_deriv, 0, num_frames, block_dim_ * num_blocks_, const_dim_);
     const_in_deriv.CopyFromMat(const_out_deriv);
   }
 
@@ -202,7 +202,7 @@ void VectorMixComponent::Init(BaseFloat learning_rate,
                                 BaseFloat param_stddev,
                                 BaseFloat bias_stddev,
                                 int32 num_blocks,
-                                int32 const_component_dim) {
+                                int32 const_dim) {
   UpdatableComponent::Init(learning_rate);
   KALDI_ASSERT(block_dim > 0 && param_stddev >= 0.0);
 
@@ -215,18 +215,18 @@ void VectorMixComponent::Init(BaseFloat learning_rate,
   bias_params_.Scale(bias_stddev);
   block_dim_ = block_dim;
   num_blocks_ = num_blocks;
-  const_component_dim_ = const_component_dim;
+  const_dim_ = const_dim;
 }
 
 void VectorMixComponent::InitFromString(std::string args) {
   std::string orig_args(args);
   bool ok = true;
   BaseFloat learning_rate = learning_rate_;
-  int32 block_dim = -1, num_blocks = 1, const_component_dim = 0;
+  int32 block_dim = -1, num_blocks = 1, const_dim = 0;
   ParseFromString("learning-rate", &args, &learning_rate); // optional.
   ok = ok && ParseFromString("block-dim", &args, &block_dim);
   ok = ok && ParseFromString("num-blocks", &args, &num_blocks);
-  ok = ok && ParseFromString("const-component-dim", &args, &const_component_dim);
+  ok = ok && ParseFromString("const-component-dim", &args, &const_dim);
   BaseFloat param_stddev = 1.0 / std::sqrt(block_dim * num_blocks),
       bias_stddev = 1.0; // TODO should param_stddev be greater ?
   ParseFromString("param-stddev", &args, &param_stddev);
@@ -236,7 +236,7 @@ void VectorMixComponent::InitFromString(std::string args) {
               << args;
   if (!ok)
     KALDI_ERR << "Bad initializer " << orig_args;
-  Init(learning_rate, block_dim, param_stddev, bias_stddev, num_blocks, const_component_dim);
+  Init(learning_rate, block_dim, param_stddev, bias_stddev, num_blocks, const_dim);
 }
 
 
@@ -246,7 +246,7 @@ void VectorMixComponent::Read(std::istream &is, bool binary) {
   ExpectToken(is, binary, "<NumBlocks>");
   ReadBasicType(is, binary, &num_blocks_);
   ExpectToken(is, binary, "<ConstComponentDim>");
-  ReadBasicType(is, binary, &const_component_dim_);
+  ReadBasicType(is, binary, &const_dim_);
   ExpectToken(is, binary, "<LinearParams>");
   linear_params_.Read(is, binary);
   ExpectToken(is, binary, "<BiasParams>");
@@ -264,7 +264,7 @@ void VectorMixComponent::Write(std::ostream &os, bool binary) const {
   WriteToken(os, binary, "<NumBlocks>");
   WriteBasicType(os, binary, num_blocks_);
   WriteToken(os, binary, "<ConstComponentDim>");
-  WriteBasicType(os, binary, const_component_dim_);
+  WriteBasicType(os, binary, const_dim_);
   WriteToken(os, binary, "<LinearParams>");
   linear_params_.Write(os, binary);
   WriteToken(os, binary, "<BiasParams>");
@@ -291,34 +291,44 @@ void VectorMixComponent::UnVectorize(const VectorBase<BaseFloat> &params) {
   bias_params_.CopyFromVec(params.Range(l, b));
 }
 
+std::string VectorMixComponent::Info() const {
+  std::stringstream stream;
+  stream << UpdatableComponent::Info()
+    << ", block-dim=" << block_dim_
+    << ", num_blocks=" << num_blocks_
+    << ", const-component-dim=" << const_dim_;
+  return stream.str();
+}
+
 
 AffineComponentExt::AffineComponentExt(const AffineComponentExt &component):
-    AffineComponent(component),
-    const_component_dim_(component.const_component_dim_) { }
+    AffineComponent(component) {
+}
 
 AffineComponentExt::AffineComponentExt(const AffineComponent &component, int32 const_dim):
-    AffineComponent(component),
-    const_component_dim_(const_dim) { }
+    AffineComponent(component) { 
+    const_dim_ = const_dim;
+}
 
 AffineComponentExt::AffineComponentExt(const AffineComponentPreconditioned &component,
-                                       int32 const_dim):
-    AffineComponent(component),
-    const_component_dim_(const_dim) { }
+                                       int32 const_dim): AffineComponent(component) {
+    const_dim_ = const_dim;
+}
 
 AffineComponentExt::AffineComponentExt(const CuMatrixBase<BaseFloat> &linear_params,
                                  const CuVectorBase<BaseFloat> &bias_params,
-                                 BaseFloat learning_rate, int32 const_component_dim):
-    AffineComponent(linear_params, bias_params, learning_rate),
-    const_component_dim_(const_component_dim) {
+                                 BaseFloat learning_rate, int32 const_dim):
+    AffineComponent(linear_params, bias_params, learning_rate) {
+    const_dim_ = const_dim;
 }
 
 void AffineComponentExt::SetParams(const VectorBase<BaseFloat> &bias,
                                 const MatrixBase<BaseFloat> &linear,
-                                int32 const_component_dim) {
+                                int32 const_dim) {
   bias_params_ = bias;
   linear_params_ = linear;
   KALDI_ASSERT(bias_params_.Dim() == linear_params_.NumRows());
-  const_component_dim_ = const_component_dim;
+  const_dim_ = const_dim;
 }
 
 std::string AffineComponentExt::Info() const {
@@ -332,7 +342,7 @@ std::string AffineComponentExt::Info() const {
                               bias_params_.Dim());
   stream << Type() << ", input-dim=" << InputDim()
          << ", output-dim=" << OutputDim()
-         << ", const-component-dim=" << const_component_dim_
+         << ", const-component-dim=" << const_dim_
          << ", linear-params-stddev=" << linear_stddev
          << ", bias-params-stddev=" << bias_stddev
          << ", learning-rate=" << LearningRate();
@@ -344,7 +354,7 @@ Component* AffineComponentExt::Copy() const {
   ans->learning_rate_ = learning_rate_;
   ans->linear_params_ = linear_params_;
   ans->bias_params_ = bias_params_;
-  ans->const_component_dim_ = const_component_dim_;
+  ans->const_dim_ = const_dim_;
   ans->is_gradient_ = is_gradient_;
   return ans;
 }
@@ -352,9 +362,22 @@ Component* AffineComponentExt::Copy() const {
 void AffineComponentExt::Init(BaseFloat learning_rate,
                            int32 input_dim, int32 output_dim,
                            BaseFloat param_stddev, BaseFloat bias_stddev,
-                           int32 const_component_dim) {
+                           int32 const_dim) {
   AffineComponent::Init(learning_rate, input_dim, output_dim, param_stddev, bias_stddev);
-  const_component_dim_ = const_component_dim;
+  const_dim_ = const_dim;
+}
+
+void AffineComponentExt::Init(BaseFloat learning_rate,
+                           std::string matrix_filename) {
+  UpdatableComponent::Init(learning_rate);
+  CuMatrix<BaseFloat> mat;
+  ReadKaldiObject(matrix_filename, &mat); // will abort on failure.
+  KALDI_ASSERT(mat.NumCols() >= 2);
+  int32 input_dim = mat.NumCols() - 1, output_dim = mat.NumRows();
+  linear_params_.Resize(output_dim, input_dim);
+  bias_params_.Resize(output_dim);
+  linear_params_.CopyFromMat(mat.Range(0, output_dim, 0, input_dim));
+  bias_params_.CopyColFromMat(mat, input_dim);
 }
 
 void AffineComponentExt::InitFromString(std::string args) {
@@ -365,7 +388,7 @@ void AffineComponentExt::InitFromString(std::string args) {
   int32 input_dim = -1, output_dim = -1, const_dim = -1;
   ParseFromString("learning-rate", &args, &learning_rate); // optional.
   if (ParseFromString("matrix", &args, &matrix_filename)) {
-    AffineComponent::Init(learning_rate, matrix_filename);
+    Init(learning_rate, matrix_filename);
     if (ParseFromString("trans-input-dim", &args, &input_dim))
       KALDI_ASSERT(input_dim == linear_params_.NumCols() &&
                    "trans-input-dim mismatch vs. matrix.");
@@ -399,24 +422,24 @@ void AffineComponentExt::Propagate(const ChunkInfo &in_info,
   out_info.CheckSize(*out);
   KALDI_ASSERT(in_info.NumChunks() == out_info.NumChunks());
   
-  CuSubMatrix<BaseFloat> trans_in(in, 0, in.NumRows(), 0, in.NumCols() - const_component_dim_);
-  CuSubMatrix<BaseFloat> trans_out(*out, 0, in.NumRows(), 0, out->NumCols() - const_component_dim_);
+  CuSubMatrix<BaseFloat> trans_in(in, 0, in.NumRows(), 0, in.NumCols() - const_dim_);
+  CuSubMatrix<BaseFloat> trans_out(*out, 0, in.NumRows(), 0, out->NumCols() - const_dim_);
   // No need for asserts as they'll happen within the matrix operations.
   trans_out.CopyRowsFromVec(bias_params_); // copies bias_params_ to each row
   // of *out.
   trans_out.AddMatMat(1.0, trans_in, kNoTrans, linear_params_, kTrans, 1.0);
 
-  if (const_component_dim_ > 0) {
-    CuSubMatrix<BaseFloat> const_in(in, 0, in.NumRows(), in.NumCols() - const_component_dim_, const_component_dim_);
-    CuSubMatrix<BaseFloat> const_out(*out, 0, in.NumRows(), out->NumCols() - const_component_dim_, const_component_dim_);
+  if (const_dim_ > 0) {
+    CuSubMatrix<BaseFloat> const_in(in, 0, in.NumRows(), in.NumCols() - const_dim_, const_dim_);
+    CuSubMatrix<BaseFloat> const_out(*out, 0, in.NumRows(), out->NumCols() - const_dim_, const_dim_);
     const_out.CopyFromMat(const_in);
   }
 }
 
 void AffineComponentExt::UpdateSimple(const CuMatrixBase<BaseFloat> &in_value,
                                    const CuMatrixBase<BaseFloat> &out_deriv) {
-  CuSubMatrix<BaseFloat> trans_in_value(in_value, 0, in_value.NumRows(), 0, in_value.NumCols() - const_component_dim_);
-  CuSubMatrix<BaseFloat> trans_out_deriv(out_deriv, 0, out_deriv.NumRows(), 0, out_deriv.NumCols() - const_component_dim_);
+  CuSubMatrix<BaseFloat> trans_in_value(in_value, 0, in_value.NumRows(), 0, in_value.NumCols() - const_dim_);
+  CuSubMatrix<BaseFloat> trans_out_deriv(out_deriv, 0, out_deriv.NumRows(), 0, out_deriv.NumCols() - const_dim_);
   bias_params_.AddRowSumMat(learning_rate_, trans_out_deriv, 1.0);
   linear_params_.AddMatMat(learning_rate_, trans_out_deriv, kTrans,
                            trans_in_value, kNoTrans, 1.0);
@@ -431,16 +454,16 @@ void AffineComponentExt::Backprop(const ChunkInfo &, //in_info,
                                CuMatrix<BaseFloat> *in_deriv) const {
   AffineComponentExt *to_update = dynamic_cast<AffineComponentExt*>(to_update_in);
   in_deriv->Resize(out_deriv.NumRows(), InputDim());
-  int32 trans_in_dim = in_deriv->NumCols() - const_component_dim_;
-  int32 trans_out_dim = out_deriv.NumCols() - const_component_dim_;
+  int32 trans_in_dim = in_deriv->NumCols() - const_dim_;
+  int32 trans_out_dim = out_deriv.NumCols() - const_dim_;
   CuSubMatrix<BaseFloat> trans_in_deriv(*in_deriv, 0, out_deriv.NumRows(), 0, trans_in_dim);
   CuSubMatrix<BaseFloat> trans_out_deriv(out_deriv, 0, out_deriv.NumRows(), 0, trans_out_dim);
   // Propagate the derivative back to the input.
   trans_in_deriv.AddMatMat(1.0, trans_out_deriv, kNoTrans, linear_params_, kNoTrans, 0.0);
 
-  if (const_component_dim_ > 0) {
-    CuSubMatrix<BaseFloat> const_in_deriv(*in_deriv, 0, out_deriv.NumRows(), trans_in_dim, const_component_dim_);
-    CuSubMatrix<BaseFloat> const_out_deriv(out_deriv, 0, out_deriv.NumRows(), trans_out_dim, const_component_dim_);
+  if (const_dim_ > 0) {
+    CuSubMatrix<BaseFloat> const_in_deriv(*in_deriv, 0, out_deriv.NumRows(), trans_in_dim, const_dim_);
+    CuSubMatrix<BaseFloat> const_out_deriv(out_deriv, 0, out_deriv.NumRows(), trans_out_dim, const_dim_);
     const_in_deriv.CopyFromMat(const_out_deriv);
   }
 
@@ -463,7 +486,7 @@ void AffineComponentExt::Read(std::istream &is, bool binary) {
   ExpectOneOrTwoTokens(is, binary, ostr_beg.str(), "<LearningRate>");
   ReadBasicType(is, binary, &learning_rate_);
   ExpectToken(is, binary, "<ConstComponentDim>");
-  ReadBasicType(is, binary, &const_component_dim_);
+  ReadBasicType(is, binary, &const_dim_);
   ExpectToken(is, binary, "<LinearParams>");
   linear_params_.Read(is, binary);
   ExpectToken(is, binary, "<BiasParams>");
@@ -496,7 +519,7 @@ void AffineComponentExt::Write(std::ostream &os, bool binary) const {
   WriteToken(os, binary, "<LearningRate>");
   WriteBasicType(os, binary, learning_rate_);
   WriteToken(os, binary, "<ConstComponentDim>");
-  WriteBasicType(os, binary, const_component_dim_);
+  WriteBasicType(os, binary, const_dim_);
   WriteToken(os, binary, "<LinearParams>");
   linear_params_.Write(os, binary);
   WriteToken(os, binary, "<BiasParams>");
@@ -520,16 +543,20 @@ void AffineComponentExt::UnVectorize(const VectorBase<BaseFloat> &params) {
                                         linear_params_.NumRows()));
 }
 
-void FixedAffineComponentExt::Init(const CuMatrixBase<BaseFloat> &mat, int32 const_component_dim) {
-  FixedAffineComponent::Init(mat);
-  const_component_dim_ = const_component_dim;
+void FixedAffineComponentExt::Init(const CuMatrixBase<BaseFloat> &mat, int32 const_dim) {
+  KALDI_ASSERT(mat.NumCols() > 1);
+  linear_params_ = mat.Range(0, mat.NumRows(),
+                             0, mat.NumCols() - 1);
+  bias_params_.Resize(mat.NumRows());
+  bias_params_.CopyColFromMat(mat, mat.NumCols() - 1);
+  const_dim_ = const_dim;
 }
 
 void FixedAffineComponentExt::InitFromString(std::string args) {
   std::string orig_args = args;
   std::string filename;
-  int32 const_component_dim;
-  bool ok = ParseFromString("const-component-dim", &args, &const_component_dim)
+  int32 const_dim;
+  bool ok = ParseFromString("const-component-dim", &args, &const_dim)
             && ParseFromString("matrix", &args, &filename);
 
   if (!ok || !args.empty())
@@ -541,12 +568,12 @@ void FixedAffineComponentExt::InitFromString(std::string args) {
   CuMatrix<BaseFloat> mat;
   mat.Read(ki.Stream(), binary);
   KALDI_ASSERT(mat.NumRows() != 0);
-  Init(mat, const_component_dim);
+  Init(mat, const_dim);
 }
 
 std::string FixedAffineComponentExt::Info() const {
   std::stringstream stream;
-  stream << FixedAffineComponent::Info() << ", const-component-dim=" << const_component_dim_;
+  stream << FixedAffineComponent::Info() << ", const-component-dim=" << const_dim_;
   return stream.str();
 }
 
@@ -558,9 +585,9 @@ void FixedAffineComponentExt::Propagate(const ChunkInfo &in_info,
   out_info.CheckSize(*out);
   KALDI_ASSERT(in_info.NumChunks() == out_info.NumChunks());
   
-  if (const_component_dim_ > 0) {
-    CuSubMatrix<BaseFloat> in_const(in, 0, in.NumRows(), linear_params_.NumCols(), const_component_dim_);
-    CuSubMatrix<BaseFloat> out_const(*out, 0, out->NumRows(), linear_params_.NumRows(), const_component_dim_);
+  if (const_dim_ > 0) {
+    CuSubMatrix<BaseFloat> in_const(in, 0, in.NumRows(), linear_params_.NumCols(), const_dim_);
+    CuSubMatrix<BaseFloat> out_const(*out, 0, out->NumRows(), linear_params_.NumRows(), const_dim_);
     out_const.CopyFromMat(in_const);
   }
 
@@ -579,9 +606,9 @@ void FixedAffineComponentExt::Backprop(const ChunkInfo &,  //in_info,
                                     CuMatrix<BaseFloat> *in_deriv) const  {
   in_deriv->Resize(out_deriv.NumRows(), InputDim());
 
-  if (const_component_dim_ > 0) {
-    CuSubMatrix<BaseFloat> in_deriv_const(*in_deriv, 0, in_deriv->NumRows(), linear_params_.NumCols(), const_component_dim_);
-    CuSubMatrix<BaseFloat> out_deriv_const(out_deriv, 0, out_deriv.NumRows(), linear_params_.NumRows(), const_component_dim_);
+  if (const_dim_ > 0) {
+    CuSubMatrix<BaseFloat> in_deriv_const(*in_deriv, 0, in_deriv->NumRows(), linear_params_.NumCols(), const_dim_);
+    CuSubMatrix<BaseFloat> out_deriv_const(out_deriv, 0, out_deriv.NumRows(), linear_params_.NumRows(), const_dim_);
     out_deriv_const.CopyFromMat(in_deriv_const);
   }
 
@@ -594,7 +621,7 @@ Component* FixedAffineComponentExt::Copy() const {
   FixedAffineComponentExt *ans = new FixedAffineComponentExt();
   ans->linear_params_ = linear_params_;
   ans->bias_params_ = bias_params_;
-  ans->const_component_dim_ = const_component_dim_;
+  ans->const_dim_ = const_dim_;
   return ans;
 }
 
@@ -606,7 +633,7 @@ void FixedAffineComponentExt::Write(std::ostream &os, bool binary) const {
   WriteToken(os, binary, "<BiasParams>");
   bias_params_.Write(os, binary);
   WriteToken(os, binary, "<ConstComponentDim>");
-  WriteBasicType(os, binary, const_component_dim_);
+  WriteBasicType(os, binary, const_dim_);
   WriteToken(os, binary, "</FixedAffineComponentExt>");
 }
 
@@ -616,7 +643,7 @@ void FixedAffineComponentExt::Read(std::istream &is, bool binary) {
   ExpectToken(is, binary, "<BiasParams>");
   bias_params_.Read(is, binary);
   ExpectToken(is, binary, "<ConstComponentDim>");
-  ReadBasicType(is, binary, &const_component_dim_);
+  ReadBasicType(is, binary, &const_dim_);
   ExpectToken(is, binary, "</FixedAffineComponentExt>");
 }
 
@@ -687,6 +714,7 @@ void TanhComponentExt::Propagate(const ChunkInfo &in_info,
   out_info.CheckSize(*out);
   KALDI_ASSERT(in_info.NumChunks() == out_info.NumChunks());
   int32 nonlinear_dim = dim_ - const_dim_;
+  KALDI_ASSERT(nonlinear_dim > 0);
   CuSubMatrix<BaseFloat> out_part(*out, 0, out->NumRows(), 0, nonlinear_dim);
   CuSubMatrix<BaseFloat> in_part(in, 0, in.NumRows(), 0, nonlinear_dim);
   out_part.Tanh(in_part);
@@ -713,12 +741,13 @@ void TanhComponentExt::Backprop(const ChunkInfo &, //in_info,
     We can accomplish this via calls to the matrix library. */
 
   int32 nonlinear_dim = dim_ - const_dim_;
+  KALDI_ASSERT(nonlinear_dim > 0);
   in_deriv->Resize(out_deriv.NumRows(), out_deriv.NumCols());
 
   if (const_dim_ > 0) {
     CuSubMatrix<BaseFloat> in_deriv_const(*in_deriv, 0, in_deriv->NumRows(), nonlinear_dim, const_dim_);
     CuSubMatrix<BaseFloat> out_deriv_const(out_deriv, 0, out_deriv.NumRows(), nonlinear_dim, const_dim_);
-    out_deriv_const.CopyFromMat(in_deriv_const);
+    in_deriv_const.CopyFromMat(out_deriv_const);
   }
 
   CuSubMatrix<BaseFloat> in_deriv_part(*in_deriv, 0, in_deriv->NumRows(), 0, nonlinear_dim);
@@ -733,13 +762,54 @@ void TanhComponentExt::Backprop(const ChunkInfo &, //in_info,
   // now in_deriv = (1.0 - out_value^2), the element-by-element derivative of
   // the nonlinearity.
   if (to_update != NULL)
-    dynamic_cast<NonlinearComponent*>(to_update)->UpdateStats(out_value_part,
+    dynamic_cast<TanhComponentExt*>(to_update)->UpdateStats(out_value_part,
                                                               &in_deriv_part);
   in_deriv_part.MulElements(out_deriv_part);
 }
 
+void TanhComponentExt::UpdateStats(const CuMatrixBase<BaseFloat> &out_value,
+                                     const CuMatrixBase<BaseFloat> *deriv) {
+  int32 nonlinear_dim = dim_ - const_dim_;
+  KALDI_ASSERT(out_value.NumCols() == nonlinear_dim);
+  // Check we have the correct dimensions.
+  if (value_sum_.Dim() != nonlinear_dim ||
+      (deriv != NULL && deriv_sum_.Dim() != nonlinear_dim)) {
+    mutex_.Lock();
+    if (value_sum_.Dim() != nonlinear_dim) {
+      value_sum_.Resize(nonlinear_dim);
+      count_ = 0.0;
+    }
+    if (deriv != NULL && deriv_sum_.Dim() != nonlinear_dim) {
+      deriv_sum_.Resize(nonlinear_dim);
+      count_ = 0.0;
+      value_sum_.SetZero();
+    }
+    mutex_.Unlock();
+  }
+  count_ += out_value.NumRows();
+  CuVector<BaseFloat> temp(nonlinear_dim);
+  temp.AddRowSumMat(1.0, out_value, 0.0);
+  value_sum_.AddVec(1.0, temp);
+  if (deriv != NULL) {
+    temp.AddRowSumMat(1.0, *deriv, 0.0);
+    deriv_sum_.AddVec(1.0, temp);
+  }
+}
+
+std::string TanhComponentExt::Info() const {
+  std::stringstream stream;
+  stream << NonlinearComponent::Info() << ", const-dim=" << const_dim_;
+  return stream.str();
+}
+
 void PnormComponentExt::Init(int32 input_dim, int32 output_dim, BaseFloat p, int32 const_dim)  {
-  PnormComponent::Init(input_dim, output_dim, p);
+  input_dim_ = input_dim;
+  output_dim_ = output_dim;
+  if (input_dim_ == 0)
+    input_dim_ = 10 * output_dim_; // default group size : 10
+  p_ = p;
+  KALDI_ASSERT(input_dim_ > 0 && output_dim_ >= 0 && p_ >= 0);
+  KALDI_ASSERT(input_dim_ % output_dim_ == 0);
   const_dim_ = const_dim;
 }
 
@@ -792,7 +862,7 @@ void PnormComponentExt::Backprop(const ChunkInfo &,  // in_info,
   if (const_dim_ > 0) {
     CuSubMatrix<BaseFloat> in_deriv_const(*in_deriv, 0, in_deriv->NumRows(), input_dim_, const_dim_);
     CuSubMatrix<BaseFloat> out_deriv_const(out_deriv, 0, out_deriv.NumRows(), output_dim_, const_dim_);
-    out_deriv_const.CopyFromMat(in_deriv_const);
+    in_deriv_const.CopyFromMat(out_deriv_const);
   }
 
   CuSubMatrix<BaseFloat> in_deriv_part(*in_deriv, 0, in_deriv->NumRows(), 0, input_dim_);
@@ -830,8 +900,10 @@ void PnormComponentExt::Write(std::ostream &os, bool binary) const {
 
 std::string PnormComponentExt::Info() const {
   std::stringstream stream;
-  stream << Type() << ", input-dim = " << input_dim_
-         << ", output-dim = " << output_dim_
+  stream << Type() << ", input-dim = " << InputDim()
+         << ", output-dim = " << OutputDim()
+         << ", pnorm-input-dim = " << input_dim_
+         << ", pnorm-output-dim = " << output_dim_
          << ", const-dim = " << const_dim_
      << ", p = " << p_;
   return stream.str();
@@ -902,13 +974,15 @@ void NormalizeComponentExt::Propagate(const ChunkInfo &in_info,
                                    CuMatrixBase<BaseFloat> *out) const  {
   out->CopyFromMat(in);
 
-  CuSubMatrix<BaseFloat> in_part(in, 0, in.NumRows(), 0, dim_);
+  int32 nonlinear_dim = dim_ - const_dim_;
+
+  CuSubMatrix<BaseFloat> in_part(in, 0, in.NumRows(), 0, nonlinear_dim);
   CuVector<BaseFloat> in_norm(in.NumRows());
-  in_norm.AddDiagMat2(1.0 / dim_, in_part, kNoTrans, 0.0);
+  in_norm.AddDiagMat2(1.0 / nonlinear_dim, in_part, kNoTrans, 0.0);
   in_norm.ApplyFloor(kNormFloor);
   in_norm.ApplyPow(-0.5);
 
-  CuSubMatrix<BaseFloat> out_part(*out, 0, out->NumRows(), 0, dim_);
+  CuSubMatrix<BaseFloat> out_part(*out, 0, out->NumRows(), 0, nonlinear_dim);
   out_part.MulRowsVec(in_norm);
 }
 
@@ -944,16 +1018,18 @@ void NormalizeComponentExt::Backprop(const ChunkInfo &,  // in_info,
                                   CuMatrix<BaseFloat> *in_deriv) const  {
   in_deriv->Resize(out_deriv.NumRows(), out_deriv.NumCols());
 
+  int32 nonlinear_dim = dim_ - const_dim_;
+
   if (const_dim_ > 0) {
-    CuSubMatrix<BaseFloat> in_deriv_const(*in_deriv, 0, in_deriv->NumRows(), dim_, const_dim_);
-    CuSubMatrix<BaseFloat> out_deriv_const(out_deriv, 0, out_deriv.NumRows(), dim_, const_dim_);
-    out_deriv_const.CopyFromMat(in_deriv_const);
+    CuSubMatrix<BaseFloat> in_deriv_const(*in_deriv, 0, in_deriv->NumRows(), nonlinear_dim, const_dim_);
+    CuSubMatrix<BaseFloat> out_deriv_const(out_deriv, 0, out_deriv.NumRows(), nonlinear_dim, const_dim_);
+    in_deriv_const.CopyFromMat(out_deriv_const);
   }
 
-  CuSubMatrix<BaseFloat> in_deriv_part(*in_deriv, 0, in_deriv->NumRows(), 0, dim_);
-  CuSubMatrix<BaseFloat> out_deriv_part(out_deriv, 0, out_deriv.NumRows(), 0, dim_);
-  CuSubMatrix<BaseFloat> in_value_part(in_value, 0, in_value.NumRows(), 0, dim_);
-  CuSubMatrix<BaseFloat> out_value_part(out_value, 0, out_value.NumRows(), 0, dim_);
+  CuSubMatrix<BaseFloat> in_deriv_part(*in_deriv, 0, in_deriv->NumRows(), 0, nonlinear_dim);
+  CuSubMatrix<BaseFloat> out_deriv_part(out_deriv, 0, out_deriv.NumRows(), 0, nonlinear_dim);
+  CuSubMatrix<BaseFloat> in_value_part(in_value, 0, in_value.NumRows(), 0, nonlinear_dim);
+  CuSubMatrix<BaseFloat> out_value_part(out_value, 0, out_value.NumRows(), 0, nonlinear_dim);
 
   CuVector<BaseFloat> in_norm(in_value_part.NumRows());
   in_norm.AddDiagMat2(1.0 / in_value_part.NumCols(),
@@ -968,6 +1044,12 @@ void NormalizeComponentExt::Backprop(const ChunkInfo &,  // in_info,
   dot_products.MulElements(in_norm);
 
   in_deriv_part.AddDiagVecMat(-1.0 / in_value_part.NumCols(), dot_products, in_value_part, kNoTrans, 1.0);
+}
+
+std::string NormalizeComponentExt::Info() const {
+  std::stringstream stream;
+  stream << NonlinearComponent::Info() << ", const-dim=" << const_dim_;
+  return stream.str();
 }
 
 } // namespace nnet2

@@ -87,6 +87,10 @@ cmvn_opts=  # will be passed to get_egs.sh, if supplied.
 feat_type=  # Can be used to force "raw" features.
 prior_subset_size=10000 # 10k samples per job, for computing priors.  Should be
                         # more than enough.
+feat_mix= # vector_weight/scalar_weight
+feat_mix_block_dim=42
+feat_mix_const_dim=40
+feat_mix_num_blocks=4
 # End configuration section.
 
 
@@ -211,9 +215,45 @@ if [ $stage -le -2 ]; then
   splice_output_dim=`perl -e "print (( $splice_width *2+1) * $tot_input_dim );"`
   cat >$dir/nnet.config <<EOF
 SpliceComponent input-dim=$tot_input_dim left-context=$splice_width right-context=$splice_width const-component-dim=0
+EOF
+
+  if [ -z "$feat_mix" ]; then # normal pnorm layer
+    cat >>$dir/nnet.config <<EOF
 AffineComponentPreconditionedOnline input-dim=$splice_output_dim output-dim=$pnorm_input_dim $online_preconditioning_opts learning-rate=$initial_learning_rate param-stddev=$stddev bias-stddev=$bias_stddev
 PnormComponent input-dim=$pnorm_input_dim output-dim=$pnorm_output_dim p=$p
 NormalizeComponent dim=$pnorm_output_dim
+EOF
+  else
+    feat_mix_input_dim=`perl -e "print ($feat_mix_block_dim * $feat_mix_num_blocks + $feat_mix_const_dim);"`
+    if [ $splice_output_dim != $feat_mix_input_dim ]; then
+      echo "ERROR: splice_output_dim ($splice_output_dim) != feat_mix_input_dim ($feat_mix_output_dim)"
+      exit 1;
+    fi
+    #TODO making VectorMixComponent support frame splicing
+    if [ $splice_width -ne 0 ]; then
+      echo "ERROR: VectorMixComponent does not support spliced inputs"
+      exit 1;
+    fi
+    feat_mix_output_dim=$[feat_mix_block_dim+feat_mix_const_dim]
+    echo "INFO: feat_mix is on, reducing num_hidden_layers to $num_hidden_layers since an extra non-linear layer is added in the initial model."
+    if [ $feat_mix == full_conn ]; then
+      cat >>$dir/nnet.config <<EOF
+AffineComponentExt trans-input-dim=$[$feat_mix_block_dim * $feat_mix_num_blocks] trans-output-dim=$feat_mix_block_dim const-component-dim=$feat_mix_const_dim learning-rate=$initial_learning_rate param-stddev=$stddev bias-stddev=$bias_stddev
+AffineComponentPreconditionedOnline input-dim=$feat_mix_output_dim output-dim=$pnorm_input_dim $online_preconditioning_opts learning-rate=$initial_learning_rate param-stddev=$stddev bias-stddev=$bias_stddev
+PnormComponent input-dim=$pnorm_input_dim output-dim=$pnorm_output_dim p=$p
+NormalizeComponent dim=$pnorm_output_dim
+EOF
+    elif [ $feat_mix == vector_mix ]; then
+      cat >>$dir/nnet.config <<EOF
+VectorMixComponent block-dim=$feat_mix_block_dim num-blocks=$feat_mix_num_blocks const-component-dim=$feat_mix_const_dim learning-rate=$initial_learning_rate param-stddev=$stddev bias-stddev=$bias_stddev
+AffineComponentPreconditionedOnline input-dim=$feat_mix_output_dim output-dim=$pnorm_input_dim $online_preconditioning_opts learning-rate=$initial_learning_rate param-stddev=$stddev bias-stddev=$bias_stddev
+PnormComponent input-dim=$pnorm_input_dim output-dim=$pnorm_output_dim p=$p
+NormalizeComponent dim=$pnorm_output_dim
+EOF
+    fi
+  fi
+
+  cat >>$dir/nnet.config <<EOF
 AffineComponentPreconditionedOnline input-dim=$pnorm_output_dim output-dim=$num_leaves $online_preconditioning_opts learning-rate=$initial_learning_rate param-stddev=0 bias-stddev=0
 SoftmaxComponent dim=$num_leaves
 EOF
@@ -344,7 +384,6 @@ while [ $x -lt $num_iters ]; do
         inp=$[$inp-1]
       fi
       mdl="nnet-init --srand=$x $dir/hidden.config - | nnet-insert --insert-at=$inp $dir/$x.mdl - - |"
-
     else
       mdl=$dir/$x.mdl
     fi

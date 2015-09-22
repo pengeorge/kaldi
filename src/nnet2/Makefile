@@ -14,6 +14,7 @@ TESTFILES = nnet-component-test nnet-precondition-test \
     nnet-compute-test
 
 OBJFILES = nnet-component.o nnet-nnet.o train-nnet.o train-nnet-ensemble.o nnet-update.o \
+		 nnet-component-ext.o \
      nnet-compute.o am-nnet.o nnet-functions.o  \
      nnet-precondition.o shrink-nnet.o combine-nnet.o combine-nnet-a.o \
      mixup-nnet.o nnet-update-parallel.o combine-nnet-fast.o \

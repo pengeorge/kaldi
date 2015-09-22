@@ -15,13 +15,22 @@ transform_dir=  # if empty, will automatically set as exp/tri5_ali ($dirid==trai
 exp_dir=exp_bnf_anymodel
 exp_concat_dir=exp_concat_4lang10hr.raw_3hid
 
-append_fmllr=false
+append_fmllr=true
+fmllr_splice_width=0 # useful only when append_fmllr=true
+bnf_input_feat_type=
 
 bnf_nnet_list=
 
 echo "$0 $@"
 
 . ./utils/parse_options.sh
+
+if $append_fmllr; then
+  exp_concat_dir=${exp_concat_dir}_fmllr
+  if [ $fmllr_splice_width -gt 0 ]; then
+    exp_concat_dir=${exp_concat_dir}X$[2*$fmllr_splice_width+1]
+  fi
+fi
 
 data_dir=`echo $exp_dir | sed 's/exp/data/'`
 param_dir=`echo $exp_dir | sed 's/exp/param/'`
@@ -71,6 +80,7 @@ for bn in $bnf_nnet_list; do
   if [ ! -f $data_dir/$bnid/${dirid}/.done ]; then
     mkdir -p $param_dir/$bnid
     czpScripts/nnet2/dump_bottleneck_features.chenzp.sh --nj $train_nj --cmd "$train_cmd" \
+      --feat-type "$bnf_input_feat_type" \
       data/${dirid} $data_dir/$bnid/${dirid} $bn $param_dir/$bnid $exp_dir/dump_bnf_$bnid
     echo $bn > $data_dir/$bnid/${dirid}/bnnet
     touch $data_dir/$bnid/${dirid}/.done
@@ -80,18 +90,27 @@ done
 
 if [ ! -f $data_concat_dir/${dirid}/.done ]; then
   if $append_fmllr; then
-    if [ ! -f $data_concat_dir/${dirid}_sat/.done ]; then
-      czpScripts/nnet/make_fmllr_feats.chenzp.sh --cmd "$train_cmd -tc 10" \
-        --nj $train_nj --transform-dir $transform_dir $data_concat_dir/${dirid}_sat data/${dirid} \
-        exp/tri5_ali $exp_concat_dir/make_fmllr_feats/log $param_concat_dir  
-      touch $data_concat_dir/${dirid}_sat/.done
+    sat_datadir=$data_concat_dir/${dirid}_sat
+    if [ $fmllr_splice_width -gt 0 ]; then
+      sat_datadir=${sat_datadir}X$[2*$fmllr_splice_width+1]
+      fmllr_splice_opts=" --splice-on-fmllr $fmllr_splice_width "
+    else
+      fmllr_splice_opts=
     fi
-    data_dir_list="$data_dir_list $data_concat_dir/${dirid}_sat"
+    if [ ! -f $sat_datadir/.done ]; then
+      czpScripts/nnet/make_fmllr_feats.chenzp.sh --cmd "$train_cmd -tc 10" \
+        $fmllr_splice_opts \
+        --nj $train_nj --transform-dir $transform_dir $sat_datadir data/${dirid} \
+        exp/tri5_ali $exp_concat_dir/make_fmllr_feats/log $param_concat_dir  
+      touch $sat_datadir/.done
+    fi
+    data_dir_list="$data_dir_list $sat_datadir"
   fi
   steps/append_feats.sh --cmd "$train_cmd" --nj $train_nj \
     $data_dir_list $data_concat_dir/${dirid} $exp_concat_dir/append_feats/log $param_concat_dir
   steps/compute_cmvn_stats.sh --fake $data_concat_dir/${dirid} $exp_concat_dir/compute_cmvn_stats $param_concat_dir
   echo $data_dir_list > $data_concat_dir/${dirid}/data_dir_list
+  touch $data_concat_dir/${dirid}/.done
 fi
 
 echo "Done."

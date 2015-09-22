@@ -6,6 +6,7 @@
 
 # Begin configuration section.
 feat_type=
+name_prefix=  # prefix of data name, for discriminating different languages (chenzp)
 stage=1
 nj=4
 cmd=run.pl
@@ -51,6 +52,9 @@ for file in $bnf_nnet; do
 done
 
 name=`basename $data`
+if [ ! -z "$name_prefix" ]; then
+  name=${name_prefix}_$name
+fi
 sdata=$data/split$nj
 
 mkdir -p $dir/log

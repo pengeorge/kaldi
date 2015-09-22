@@ -10,9 +10,9 @@ LDLIBS += $(CUDA_LDLIBS)
 
 TESTFILES = 
 
-OBJFILES = nnet-component-ext.o
+OBJFILES = nnet-functions-ext.o
 
-LIBNAME = kaldi-nnet2
+LIBNAME = chenzp-nnet2
 
 ADDLIBS = ../thread/kaldi-thread.a ../lat/kaldi-lat.a ../gmm/kaldi-gmm.a \
       ../hmm/kaldi-hmm.a ../tree/kaldi-tree.a ../transform/kaldi-transform.a \

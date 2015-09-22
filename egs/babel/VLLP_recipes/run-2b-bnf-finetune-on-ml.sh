@@ -11,8 +11,8 @@ unsup_string="_semisup"
 suffix=
 unsupid=unsup.seg
 ext_in_unsup_decode=_ext
-ali_dir=exp/tri6_nnet_ali
-ali_model=exp/tri6b_nnet/
+ali_dir=exp/tri5_ali
+ali_model=exp/tri5/
 bnf_weight_threshold=0.35 
 weights_dir=exp_bnf_semisup/best_path_weights/unsup.seg_ext/decode_unsup.seg_ext_epoch1/
 

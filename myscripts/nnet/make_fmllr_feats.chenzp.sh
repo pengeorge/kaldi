@@ -12,6 +12,7 @@ nj=4
 cmd=run.pl
 transform_dir=
 raw_transform_dir=
+splice_on_fmllr=0  # chenzp (Sep 19, 2015)
 # End configuration section.
 
 echo "$0 $@"  # Print the command line for logging
@@ -82,6 +83,11 @@ esac
 utils/copy_data_dir.sh $srcdata $data; rm $data/{feats,cmvn}.scp 2>/dev/null
 # Make $feadir an absolute pathname,
 [ '/' != ${feadir:0:1} ] && feadir=$PWD/$feadir
+
+if [ $splice_on_fmllr -gt 0 ]; then
+  feats="$feats splice-feats --left-context=$splice_on_fmllr --right-context=$splice_on_fmllr ark:- ark:- |"
+  echo $splice_on_fmllr > $data/splice_on_fmllr
+fi
 
 # Store the output-features,
 name=`basename $data`

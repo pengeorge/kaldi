@@ -20,6 +20,8 @@ run_kws_stt_bg=true
 
 expsuffix=concat_4lang10hr.raw_3hid  #suffix for exp dir
 append_fmllr=false
+fmllr_splice_width=0 # useful only when append_fmllr=true
+bnf_input_feat_type=
 
 kind=
 data_only=false
@@ -154,6 +156,14 @@ if [ "$dataset_kind" == "unsupervised" ]; then
   skip_scoring=true
 fi
 
+root_expsuffix=$expsuffix # backup
+if $append_fmllr; then
+  expsuffix=${expsuffix}_fmllr
+  if [ $fmllr_splice_width -gt 0 ]; then
+    expsuffix=${expsuffix}X$[2*$fmllr_splice_width+1]
+  fi
+fi
+
 dirid=${type}
 if [ ! -z "$whole_suffix" ]; then
   exp_dir=exp_${whole_suffix}
@@ -229,7 +239,7 @@ if [ ! -f $datadir_ext/kws_common/.done ]; then
   touch $datadir_ext/kws_common/.done
 fi
 
-./run_concate_ml_bnf_feats.sh --exp-concat-dir exp${expsuffix} --bnf-nnet-list "`cat data${expsuffix}/bnf_nnet_list`" --dirid $type --append-fmllr $append_fmllr
+./run-2c-concate-bnf-feats.sh --exp-concat-dir exp_${root_expsuffix} --bnf-nnet-list "`cat data${expsuffix}/bnf_nnet_list`" --dirid $type --append-fmllr $append_fmllr --fmllr-splice-width $fmllr_splice_width --bnf-input-feat-type "$bnf_input_feat_type"
 
 if $data_only ; then
   echo "Exiting, as data-only was requested... "
@@ -363,7 +373,7 @@ if [ -f $exp_dir/sgmm7/.done ]; then
   done
 fi
 
-suffixes=".no_lda"
+suffixes=".no_lda.vector_mix .no_lda.full_conn"
 for suffix in '' $suffixes; do
   if [ -f $exp_dir/tri7_nnet${suffix}/.done ]; then
   #    [[ ( ! $exp_dir/tri7_nnet/decode_${dirid}/.done -nt $datadir/.done)  || \
