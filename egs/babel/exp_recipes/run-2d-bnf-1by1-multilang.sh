@@ -21,6 +21,7 @@ samples_per_iter=200000
 . conf/multilang_resource.conf
 
 unit_type=tanh # tanh/pnorm
+mix_type=full # full/vector/scalar
 bottleneck_dim=42
 # This parameter will be used when the training dies at a certain point.
 train_lang_stage=0
@@ -53,6 +54,12 @@ if [ ! -z "$unit_type" ] && [ $unit_type != tanh ]; then
   exp_dir_root=${exp_dir_root}.$unit_type
   data_bnf_dir_root=${data_bnf_dir_root}.$unit_type
   param_bnf_dir_root=${param_bnf_dir_root}.$unit_type
+fi
+
+if [ ! -z "$mix_type" ] && [ $mix_type != full ]; then
+  exp_dir_root=${exp_dir_root}.$mix_type
+  data_bnf_dir_root=${data_bnf_dir_root}.$mix_type
+  param_bnf_dir_root=${param_bnf_dir_root}.$mix_type
 fi
 
 arr_langid=($langres)
@@ -108,7 +115,7 @@ for l in `seq 0 $[num_lang-1]`; do
         bnf_dir_list="$bnf_dir_list ${data_bnf_dir_root}${dir_suffix[$k]}/${langid}_train_bnf"
       done
       steps/append_feats.sh --cmd "$train_cmd" --nj $train_nj \
-        $bnf_dir_list $lroot/data/train \
+        $lroot/data/train $bnf_dir_list \
         $train_data_dir $exp_dir/${langid}_append_feats/log $param_bnf_dir
       steps/compute_cmvn_stats.sh --fake $train_data_dir $exp_dir/${langid}_compute_cmvn_stats $param_bnf_dir
       touch $train_data_dir/.done

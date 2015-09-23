@@ -235,7 +235,6 @@ EOF
       exit 1;
     fi
     feat_mix_output_dim=$[feat_mix_block_dim+feat_mix_const_dim]
-    echo "INFO: feat_mix is on, reducing num_hidden_layers to $num_hidden_layers since an extra non-linear layer is added in the initial model."
     if [ $feat_mix == full_conn ]; then
       cat >>$dir/nnet.config <<EOF
 AffineComponentExt trans-input-dim=$[$feat_mix_block_dim * $feat_mix_num_blocks] trans-output-dim=$feat_mix_block_dim const-component-dim=$feat_mix_const_dim learning-rate=$initial_learning_rate param-stddev=$stddev bias-stddev=$bias_stddev

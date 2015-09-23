@@ -47,6 +47,10 @@ class WithConstComponent {
   int32 const_dim_;
 };*/
 
+/**
+ * This component does something like: output = Sigma_{b}{w(b) .* input(b)} + bias,
+ * where w(b) is a D-dim vector, 'input(b)', 'output' and 'bias' are also D-dim
+ */
 class VectorMixComponent: public UpdatableComponent {
  public:
   virtual int32 InputDim() const { return block_dim_ * num_blocks_ + const_dim_; }
@@ -106,6 +110,75 @@ class VectorMixComponent: public UpdatableComponent {
   int32 const_dim_;
  private:
   KALDI_DISALLOW_COPY_AND_ASSIGN(VectorMixComponent);
+
+};
+
+/**
+ * This component does something like: output = Sigma_{b}{w(b) * input(b)} + bias, where
+ * w(b) is a scalar, 'input(b)', 'output' and 'bias' are D-dim.
+ * NOTE that the bias is not supported currently. If there is at least one "no_scale_block"
+ * which is appended on an AffineComponent, I think the bias would be learned in this
+ * AffineComponent
+ */
+class ScalarMixComponent: public UpdatableComponent {
+ public:
+  virtual int32 InputDim() const { return block_dim_ * num_blocks_ + const_dim_; }
+  virtual int32 OutputDim() const { return block_dim_ + const_dim_; }
+  virtual int32 GetParameterDim() const;
+  virtual void Vectorize(VectorBase<BaseFloat> *params) const;
+  virtual void UnVectorize(const VectorBase<BaseFloat> &params);
+
+  // Note: num_blocks must divide input_dim.
+  void Init(BaseFloat learning_rate, int32 block_dim,
+                    BaseFloat param_stddev,
+                    int32 num_blocks, int32 num_no_scale_blocks, int32 const_dim = 0);
+  virtual void InitFromString(std::string args);
+  
+  ScalarMixComponent() { } // use Init to really initialize.
+  virtual void ResetConst(int32 const_dim = 0) {const_dim_ = const_dim; };
+  virtual std::string Type() const { return "ScalarMixComponent"; }
+  virtual bool BackpropNeedsInput() const { return true; }
+  virtual bool BackpropNeedsOutput() const { return false; }
+  using Component::Propagate; // to avoid name hiding
+  virtual void Propagate(const ChunkInfo &in_info,
+                         const ChunkInfo &out_info,
+                         const CuMatrixBase<BaseFloat> &in,
+                         CuMatrixBase<BaseFloat> *out) const; 
+  virtual void Backprop(const ChunkInfo &in_info,
+                        const ChunkInfo &out_info,
+                        const CuMatrixBase<BaseFloat> &in_value,
+                        const CuMatrixBase<BaseFloat> &out_value,                        
+                        const CuMatrixBase<BaseFloat> &out_deriv,
+                        Component *to_update, // may be identical to "this".
+                        CuMatrix<BaseFloat> *in_deriv) const;
+  virtual void SetZero(bool treat_as_gradient);
+  virtual void Read(std::istream &is, bool binary);
+  virtual void Write(std::ostream &os, bool binary) const;
+  virtual BaseFloat DotProduct(const UpdatableComponent &other) const;
+  virtual Component* Copy() const;
+  virtual void PerturbParams(BaseFloat stddev);
+  virtual void Scale(BaseFloat scale);
+  virtual void Add(BaseFloat alpha, const UpdatableComponent &other);
+  virtual std::string Info() const;
+ protected:
+  virtual void Update(
+      const CuMatrixBase<BaseFloat> &in_value,
+      const CuMatrixBase<BaseFloat> &out_deriv) {
+    UpdateSimple(in_value, out_deriv);
+  }
+  // UpdateSimple is used when *this is a gradient.  Child classes may
+  // override this.
+  virtual void UpdateSimple(
+      const CuMatrixBase<BaseFloat> &in_value,
+      const CuMatrixBase<BaseFloat> &out_deriv);
+  
+  CuVector<BaseFloat> weight_params_;
+  int32 num_blocks_;
+  int32 block_dim_;
+  int32 num_no_scale_blocks_;
+  int32 const_dim_;
+ private:
+  KALDI_DISALLOW_COPY_AND_ASSIGN(ScalarMixComponent);
 
 };
 

@@ -1017,7 +1017,7 @@ done
 ##
 ####################################################################
 if [[ "$sys_to_decode" =~ " ml_dnn " ]]; then
-  suffixes='scratch_4lang10hr_5hid.raw_cont_last'
+  suffixes='scratch_101LLP__tri6_nnet.raw_5hid.no_lda_cont scratch_104LLP__tri6_nnet.raw_5hid.no_lda_cont scratch_105LLP__tri6_nnet.raw_5hid.no_lda_cont scratch_106LLP__tri6_nnet.raw_5hid.no_lda_cont scratch_107LLP__tri6_nnet.raw_5hid.no_lda_cont scratch_204LLP__tri6_nnet.raw_5hid.no_lda_cont scratch_4lang10hr_5hid.raw_cont'
   if $multilang_test; then 
     suffixes="$suffixes "
   fi

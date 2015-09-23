@@ -1,4 +1,4 @@
 .*.swp
 .*.mk
 *.o
-src/cscope.out
+cscope.out

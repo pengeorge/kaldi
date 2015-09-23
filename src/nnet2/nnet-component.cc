@@ -81,6 +81,8 @@ Component* Component::NewComponentOfType(const std::string &component_type) {
     ans = new FixedAffineComponentExt();
   } else if (component_type == "VectorMixComponent") {
     ans = new VectorMixComponent();
+  } else if (component_type == "ScalarMixComponent") {
+    ans = new ScalarMixComponent();
   } else if (component_type == "TanhComponentExt") {
     ans = new TanhComponentExt();
   } else if (component_type == "PnormComponentExt") {

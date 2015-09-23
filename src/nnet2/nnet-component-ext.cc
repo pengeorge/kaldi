@@ -77,14 +77,6 @@ void VectorMixComponent::PerturbParams(BaseFloat stddev) {
   bias_params_.AddVec(stddev, temp_bias_params);
 }
 
-BaseFloat VectorMixComponent::DotProduct(
-    const UpdatableComponent &other_in) const {
-  const VectorMixComponent *other =
-      dynamic_cast<const VectorMixComponent*>(&other_in);
-  return TraceMatMat(linear_params_, other->linear_params_, kTrans)
-      + VecVec(bias_params_, other->bias_params_);
-}
-
 Component* VectorMixComponent::Copy() const {
   VectorMixComponent *ans = new VectorMixComponent();
   ans->learning_rate_ = learning_rate_;
@@ -94,6 +86,10 @@ Component* VectorMixComponent::Copy() const {
   ans->block_dim_ = block_dim_;
   ans->const_dim_ = const_dim_;
   return ans;
+}
+
+BaseFloat VectorMixComponent::DotProduct(const UpdatableComponent &other_in) const {
+  return 0.0;
 }
 
 void VectorMixComponent::Scale(BaseFloat scale) {
@@ -183,8 +179,8 @@ void VectorMixComponent::Backprop(const ChunkInfo &,  //in_info,
     const_in_deriv.CopyFromMat(const_out_deriv);
   }
 
+  CuSubMatrix<BaseFloat> out_deriv_block(out_deriv, 0, num_frames, 0, block_dim_);
   for (int32 b = 0; b < num_blocks_; b++) {
-    CuSubMatrix<BaseFloat> out_deriv_block(out_deriv, 0, num_frames, 0, block_dim_);
     CuSubMatrix<BaseFloat> in_value_block(in_value, 0, num_frames, b * block_dim_, block_dim_);
     CuSubMatrix<BaseFloat> in_deriv_block(*in_deriv, 0, num_frames, b * block_dim_, block_dim_);
     CuSubVector<BaseFloat> param_vector = linear_params_.Row(b);
@@ -205,6 +201,8 @@ void VectorMixComponent::Init(BaseFloat learning_rate,
                                 int32 const_dim) {
   UpdatableComponent::Init(learning_rate);
   KALDI_ASSERT(block_dim > 0 && param_stddev >= 0.0);
+  KALDI_ASSERT(num_blocks > 0);
+  KALDI_ASSERT(const_dim >= 0);
 
   linear_params_.Resize(num_blocks, block_dim);
   bias_params_.Resize(block_dim);
@@ -227,8 +225,8 @@ void VectorMixComponent::InitFromString(std::string args) {
   ok = ok && ParseFromString("block-dim", &args, &block_dim);
   ok = ok && ParseFromString("num-blocks", &args, &num_blocks);
   ok = ok && ParseFromString("const-component-dim", &args, &const_dim);
-  BaseFloat param_stddev = 1.0 / std::sqrt(block_dim * num_blocks),
-      bias_stddev = 1.0; // TODO should param_stddev be greater ?
+  BaseFloat param_stddev = 1.0 / std::sqrt(block_dim),
+      bias_stddev = 1.0;
   ParseFromString("param-stddev", &args, &param_stddev);
   ParseFromString("bias-stddev", &args, &bias_stddev);
   if (!args.empty())
@@ -245,6 +243,8 @@ void VectorMixComponent::Read(std::istream &is, bool binary) {
   ReadBasicType(is, binary, &learning_rate_);
   ExpectToken(is, binary, "<NumBlocks>");
   ReadBasicType(is, binary, &num_blocks_);
+  ExpectToken(is, binary, "<BlockDim>");
+  ReadBasicType(is, binary, &block_dim_);
   ExpectToken(is, binary, "<ConstComponentDim>");
   ReadBasicType(is, binary, &const_dim_);
   ExpectToken(is, binary, "<LinearParams>");
@@ -263,6 +263,8 @@ void VectorMixComponent::Write(std::ostream &os, bool binary) const {
   WriteBasicType(os, binary, learning_rate_);
   WriteToken(os, binary, "<NumBlocks>");
   WriteBasicType(os, binary, num_blocks_);
+  WriteToken(os, binary, "<BlockDim>");
+  WriteBasicType(os, binary, block_dim_);
   WriteToken(os, binary, "<ConstComponentDim>");
   WriteBasicType(os, binary, const_dim_);
   WriteToken(os, binary, "<LinearParams>");
@@ -300,6 +302,247 @@ std::string VectorMixComponent::Info() const {
   return stream.str();
 }
 
+void ScalarMixComponent::SetZero(bool treat_as_gradient) {
+  if (treat_as_gradient) {
+    SetLearningRate(1.0);
+  }
+  weight_params_.SetZero();
+}
+
+void ScalarMixComponent::PerturbParams(BaseFloat stddev) {
+  CuVector<BaseFloat> temp_weight_params(weight_params_);
+  temp_weight_params.SetRandn();
+  weight_params_.AddVec(stddev, temp_weight_params);
+}
+
+Component* ScalarMixComponent::Copy() const {
+  ScalarMixComponent *ans = new ScalarMixComponent();
+  ans->learning_rate_ = learning_rate_;
+  ans->weight_params_ = weight_params_;
+  ans->num_blocks_ = num_blocks_;
+  ans->block_dim_ = block_dim_;
+  ans->num_no_scale_blocks_ = num_no_scale_blocks_;
+  ans->const_dim_ = const_dim_;
+  return ans;
+}
+
+BaseFloat ScalarMixComponent::DotProduct(const UpdatableComponent &other_in) const {
+  return 0.0;
+}
+
+void ScalarMixComponent::Scale(BaseFloat scale) {
+  weight_params_.Scale(scale);
+}
+
+void ScalarMixComponent::Add(BaseFloat alpha,
+                               const UpdatableComponent &other_in) {
+  const ScalarMixComponent *other =
+      dynamic_cast<const ScalarMixComponent*>(&other_in);
+  KALDI_ASSERT(other != NULL);
+  weight_params_.AddVec(alpha, other->weight_params_);
+}
+
+void ScalarMixComponent::Propagate(const ChunkInfo &in_info,
+                                   const ChunkInfo &out_info,
+                                   const CuMatrixBase<BaseFloat> &in,
+                                   CuMatrixBase<BaseFloat> *out) const  {
+  in_info.CheckSize(in);
+  out_info.CheckSize(*out);
+  KALDI_ASSERT(in_info.NumChunks() == out_info.NumChunks());
+
+  int32 num_frames = in.NumRows();
+  KALDI_ASSERT(in.NumCols() == block_dim_ * num_blocks_ + const_dim_);
+  KALDI_ASSERT(out->NumCols() == block_dim_ + const_dim_);
+  KALDI_ASSERT(in.NumRows() == out->NumRows());
+
+  if (const_dim_ > 0) {
+    CuSubMatrix<BaseFloat> const_in(in, 0, num_frames, block_dim_ * num_blocks_, const_dim_);
+    CuSubMatrix<BaseFloat> const_out(*out, 0, num_frames, block_dim_, const_dim_);
+    const_out.CopyFromMat(const_in);
+  }
+  CuSubMatrix<BaseFloat> mix_out(*out, 0, num_frames, 0, block_dim_);
+  mix_out.SetZero();
+  //mix_out.CopyRowsFromVec(bias_params_); // copies bias_params_ to each row of *mix_out.
+
+  for (int32 b = 0; b < num_no_scale_blocks_; b++) {
+    CuSubMatrix<BaseFloat> in_block(in, 0, num_frames, b * block_dim_, block_dim_);
+    mix_out.AddMat(1.0, in_block);
+  }
+
+  for (int32 b = num_no_scale_blocks_; b < num_blocks_; b++) {
+    int32 idx = b - num_no_scale_blocks_;
+    CuSubMatrix<BaseFloat> in_block(in, 0, num_frames, b * block_dim_, block_dim_);
+    mix_out.AddMat(weight_params_(idx), in_block);
+  }
+}
+
+void ScalarMixComponent::UpdateSimple(
+    const CuMatrixBase<BaseFloat> &in_value,
+    const CuMatrixBase<BaseFloat> &out_deriv) {
+  // Get full update mat, as in full-connected case
+  CuMatrix<BaseFloat> full_update_mat(out_deriv.NumCols(), in_value.NumCols());
+  full_update_mat.AddMatMat(1.0, out_deriv, kTrans,
+                           in_value, kNoTrans, 1.0); // without learning_rate_
+
+  // Get diag updates, as in vector-mix case, excluding no_scale_block
+  // Then take the mean value of the updating vector (because of shared params)
+  int32 num_blocks_to_update = num_blocks_ - num_no_scale_blocks_;
+  CuMatrix<BaseFloat> vector_mix_update_param(num_blocks_to_update, block_dim_);
+  CuVector<BaseFloat> update_param(num_blocks_to_update);
+  for (int32 b = num_no_scale_blocks_; b < num_blocks_; b++) {
+    CuSubMatrix<BaseFloat> full_update_block(full_update_mat, 0, block_dim_,
+                                        b * block_dim_, block_dim_);
+    CuMatrix<BaseFloat> full_update_block_copy(full_update_block);
+    int32 b_of_update_blocks = b - num_no_scale_blocks_;
+    CuSubVector<BaseFloat> vector_mix_update_param_block(vector_mix_update_param, b_of_update_blocks);
+    vector_mix_update_param_block.CopyDiagFromMat(full_update_block_copy);
+    update_param(b_of_update_blocks) = vector_mix_update_param_block.Sum() / vector_mix_update_param_block.Dim();
+  }
+  // Update the parameters.
+  weight_params_.AddVec(learning_rate_, update_param);
+}
+
+void ScalarMixComponent::Backprop(const ChunkInfo &,  //in_info,
+                                    const ChunkInfo &,  //out_info,
+                                    const CuMatrixBase<BaseFloat> &in_value,
+                                    const CuMatrixBase<BaseFloat> &,  //out_value,
+                                    const CuMatrixBase<BaseFloat> &out_deriv,
+                                    Component *to_update_in,
+                                    CuMatrix<BaseFloat> *in_deriv) const  {
+
+  // This code mirrors the code in Propagate().
+  int32 num_frames = in_value.NumRows();
+  ScalarMixComponent *to_update = dynamic_cast<ScalarMixComponent*>(
+      to_update_in);
+  in_deriv->Resize(out_deriv.NumRows(), InputDim());
+  KALDI_ASSERT(in_value.NumCols() == block_dim_ * num_blocks_ + const_dim_);
+  KALDI_ASSERT(out_deriv.NumCols() == block_dim_ + const_dim_);
+
+  if (const_dim_ > 0) {
+    CuSubMatrix<BaseFloat> const_out_deriv(out_deriv, 0, num_frames, block_dim_, const_dim_);
+    CuSubMatrix<BaseFloat> const_in_deriv(*in_deriv, 0, num_frames, block_dim_ * num_blocks_, const_dim_);
+    const_in_deriv.CopyFromMat(const_out_deriv);
+  }
+
+  CuSubMatrix<BaseFloat> out_deriv_block(out_deriv, 0, num_frames, 0, block_dim_);
+  for (int32 b = 0; b < num_blocks_; b++) {
+    CuSubMatrix<BaseFloat> in_value_block(in_value, 0, num_frames, b * block_dim_, block_dim_);
+    CuSubMatrix<BaseFloat> in_deriv_block(*in_deriv, 0, num_frames, b * block_dim_, block_dim_);
+    in_deriv_block.CopyFromMat(out_deriv_block);
+    if (b >= num_no_scale_blocks_) {
+      BaseFloat this_weight = weight_params_(b - num_no_scale_blocks_);
+      in_deriv_block.Scale(this_weight);
+    }
+  }
+
+  if (to_update != NULL)
+    to_update->Update(in_value, out_deriv);
+}
+
+
+void ScalarMixComponent::Init(BaseFloat learning_rate,
+                                int32 block_dim,
+                                BaseFloat param_stddev,
+                                int32 num_blocks,
+                                int32 num_no_scale_blocks,
+                                int32 const_dim) {
+  UpdatableComponent::Init(learning_rate);
+  KALDI_ASSERT(block_dim > 0 && param_stddev >= 0.0);
+  KALDI_ASSERT(num_blocks > 0 && num_no_scale_blocks_ >= 0 && num_no_scale_blocks_ <= num_blocks);
+  KALDI_ASSERT(const_dim >= 0);
+
+  weight_params_.Resize(num_blocks);
+
+  weight_params_.SetRandn(); // sets to random normally distributed noise.
+  weight_params_.Scale(param_stddev);
+  block_dim_ = block_dim;
+  num_blocks_ = num_blocks;
+  num_no_scale_blocks_ = num_no_scale_blocks;
+  const_dim_ = const_dim;
+}
+
+void ScalarMixComponent::InitFromString(std::string args) {
+  std::string orig_args(args);
+  bool ok = true;
+  BaseFloat learning_rate = learning_rate_;
+  int32 block_dim = -1, num_blocks = 1, num_no_scale_blocks = 0, const_dim = 0;
+  ParseFromString("learning-rate", &args, &learning_rate); // optional.
+  ok = ok && ParseFromString("block-dim", &args, &block_dim);
+  ok = ok && ParseFromString("num-blocks", &args, &num_blocks);
+  ok = ok && ParseFromString("num-no-scale-blocks", &args, &num_no_scale_blocks);
+  ok = ok && ParseFromString("const-component-dim", &args, &const_dim);
+  BaseFloat param_stddev = 1.0 / std::sqrt(num_blocks);
+  ParseFromString("param-stddev", &args, &param_stddev);
+  if (!args.empty())
+    KALDI_ERR << "Could not process these elements in initializer: "
+              << args;
+  if (!ok)
+    KALDI_ERR << "Bad initializer " << orig_args;
+  Init(learning_rate, block_dim, param_stddev, num_blocks, num_no_scale_blocks, const_dim);
+}
+
+
+void ScalarMixComponent::Read(std::istream &is, bool binary) {
+  ExpectOneOrTwoTokens(is, binary, "<ScalarMixComponent>", "<LearningRate>");
+  ReadBasicType(is, binary, &learning_rate_);
+  ExpectToken(is, binary, "<NumBlocks>");
+  ReadBasicType(is, binary, &num_blocks_);
+  ExpectToken(is, binary, "<NumNoScaleBlocks>");
+  ReadBasicType(is, binary, &num_no_scale_blocks_);
+  ExpectToken(is, binary, "<BlockDim>");
+  ReadBasicType(is, binary, &block_dim_);
+  ExpectToken(is, binary, "<ConstComponentDim>");
+  ReadBasicType(is, binary, &const_dim_);
+  ExpectToken(is, binary, "<WeightParams>");
+  weight_params_.Read(is, binary);
+  ExpectToken(is, binary, "</ScalarMixComponent>");
+  KALDI_ASSERT(weight_params_.Dim() == num_blocks_);
+  KALDI_ASSERT(num_blocks_ > 0 && num_no_scale_blocks_ >= 0);
+  KALDI_ASSERT(num_no_scale_blocks_ < num_blocks_);
+  KALDI_ASSERT(block_dim_ > 0);
+  KALDI_ASSERT(const_dim_ > 0);
+}
+
+void ScalarMixComponent::Write(std::ostream &os, bool binary) const {
+  WriteToken(os, binary, "<ScalarMixComponent>");
+  WriteToken(os, binary, "<LearningRate>");
+  WriteBasicType(os, binary, learning_rate_);
+  WriteToken(os, binary, "<NumBlocks>");
+  WriteBasicType(os, binary, num_blocks_);
+  WriteToken(os, binary, "<NumNoScaleBlocks>");
+  WriteBasicType(os, binary, num_no_scale_blocks_);
+  WriteToken(os, binary, "<BlockDim>");
+  WriteBasicType(os, binary, block_dim_);
+  WriteToken(os, binary, "<ConstComponentDim>");
+  WriteBasicType(os, binary, const_dim_);
+  WriteToken(os, binary, "<WeightParams>");
+  weight_params_.Write(os, binary);
+  WriteToken(os, binary, "</ScalarMixComponent>");
+}
+
+
+int32 ScalarMixComponent::GetParameterDim() const {
+  // Note: num_blocks_ should divide both InputDim() and OutputDim().
+  return num_blocks_ - num_no_scale_blocks_;
+}
+
+void ScalarMixComponent::Vectorize(VectorBase<BaseFloat> *params) const {
+  params->CopyFromVec(weight_params_);
+}
+
+void ScalarMixComponent::UnVectorize(const VectorBase<BaseFloat> &params) {
+  weight_params_.CopyFromVec(params);
+}
+
+std::string ScalarMixComponent::Info() const {
+  std::stringstream stream;
+  stream << UpdatableComponent::Info()
+    << ", block-dim=" << block_dim_
+    << ", num_blocks=" << num_blocks_
+    << ", num_no_scale_blocks=" << num_no_scale_blocks_
+    << ", const-component-dim=" << const_dim_;
+  return stream.str();
+}
 
 AffineComponentExt::AffineComponentExt(const AffineComponentExt &component):
     AffineComponent(component) {

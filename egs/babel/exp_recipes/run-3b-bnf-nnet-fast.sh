@@ -17,10 +17,14 @@ set -e
 set -o pipefail
 set -u
 
+splice_width=5
+
 semisupervised=true
 dnn_train_stage=-100
 unsup_string=
 suffix=
+inner_suffix=
+lda_dim=$dnn_output_dim
 
 . ./utils/parse_options.sh
 
@@ -55,7 +59,7 @@ if [ ! $exp_dir/tri6_ali/.done -nt $exp_dir/tri6/.done ]; then
 fi
 
 
-if [ ! $exp_dir/tri7_nnet.fast/.done -nt $exp_dir/tri6_ali/.done ]; then
+if [ ! $exp_dir/tri7_nnet.fast${inner_suffix}/.done -nt $exp_dir/tri6_ali/.done ]; then
   echo ---------------------------------------------------------------------
   echo "Starting hybrid system building (over bottleneck features)"
   echo ---------------------------------------------------------------------
@@ -66,11 +70,12 @@ if [ ! $exp_dir/tri7_nnet.fast/.done -nt $exp_dir/tri6_ali/.done ]; then
     --num-hidden-layers $dnn_num_hidden_layers \
     --pnorm-input-dim $dnn_input_dim \
     --pnorm-output-dim $dnn_output_dim \
-    --egs-opts "--feat-type raw" --lda-opts "--feat-type raw --lda-dim $dnn_output_dim" --splice-width 5 \
+    --egs-opts "--feat-type raw" --splice-width $splice_width \
+    --lda-opts "--feat-type raw" --lda-dim "$lda_dim" \
      "${dnn_gpu_parallel_opts[@]}" --cmd "$train_cmd" \
-    $data_bnf_dir/train data/lang $exp_dir/tri6_ali $exp_dir/tri7_nnet.fast || exit 1 
+    $data_bnf_dir/train data/lang $exp_dir/tri6_ali $exp_dir/tri7_nnet.fast${inner_suffix} || exit 1 
 
-  touch $exp_dir/tri7_nnet.fast/.done 
+  touch $exp_dir/tri7_nnet.fast${inner_suffix}/.done 
 fi
 
 

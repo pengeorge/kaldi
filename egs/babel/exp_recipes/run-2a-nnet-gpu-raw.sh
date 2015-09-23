@@ -40,6 +40,8 @@ if [ ! -f $dir/.done ]; then
     --cmd "$train_cmd" \
     "${dnn_gpu_parallel_opts[@]}" \
     data/train data/lang exp/tri5_ali $dir || exit 1
+  
+  echo 6 > $dir/splice_width
 
   touch $dir/.done
 fi

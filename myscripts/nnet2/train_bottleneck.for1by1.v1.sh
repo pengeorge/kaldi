@@ -80,7 +80,6 @@ pnorm_input_dim=2000
 pnorm_output_dim=200
 p=2
 unit_type=pnorm  # tanh/pnorm, pnorm is 0.6% better
-mix_type=full  # full/vector/scalar
 # End configuration section.
 
 

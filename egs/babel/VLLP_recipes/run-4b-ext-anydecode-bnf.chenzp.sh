@@ -11,7 +11,7 @@ set -o pipefail
 [ -f local.conf ] && . ./local.conf
 
 
-dir=tun3h.pem #dev10h.pem
+dir=dev10h.pem #dev10h.pem
 
 run_kws_stt_bg=true
 # If true, scoring STT and KWS for multiple models will not block this script,
@@ -19,7 +19,7 @@ run_kws_stt_bg=true
 # time-consuming lattice-to-ctm.
 # Available only when cmd is "queue.pl ..."
 
-mlsuffix=_6langFLPNN.raw_ft  #suffix for multilang, e.g. 6langFLPNN.raw_ft
+mlsuffix=6langFLPNN.raw_ft  #suffix for multilang, e.g. 6langFLPNN.raw_ft
 
 kind=
 data_only=false
@@ -424,7 +424,7 @@ if [ -f $exp_dir/sgmm7/.done ]; then
   done
 fi
 
-suffixes='.fast'
+suffixes='.fast .fast_splice0'
 for suffix in '' $suffixes; do
   if [ -f $exp_dir/tri7_nnet${suffix}/.done ]; then
   #    [[ ( ! $exp_dir/tri7_nnet/decode_${dirid}/.done -nt $datadir/.done)  || \

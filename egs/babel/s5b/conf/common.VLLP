@@ -56,7 +56,7 @@ lmwt_sat_extra_opts=( --min-lmwt 15 --max-lmwt 15 ) # 13-18
 lmwt_sgmm_extra_opts=( --min-lmwt 12 --max-lmwt 16 )
 lmwt_bnf_extra_opts=( --min-lmwt 15 --max-lmwt 20 ) # 17-25  17-20 old: 15-22
 lmwt_dnn_extra_opts=( --min-lmwt 11 --max-lmwt 11 ) # 9-16  7-12 old: 10-15
-lmwt_bnf_dnn_extra_opts=( --min-lmwt 13 --max-lmwt 13 ) # 9-16  7-12 old: 10-15
+lmwt_bnf_dnn_extra_opts=( --min-lmwt 8 --max-lmwt 18 ) # 9-16  7-12 old: 10-15
 lmwt_cnn_extra_opts=( --min-lmwt 10 --max-lmwt 12 ) # 9-13  old: 7-12
 lmwt_lstm_extra_opts=( --min-lmwt 16 --max-lmwt 17 )
 
