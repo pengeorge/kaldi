@@ -26,6 +26,7 @@
 #include "fstext/fstext-utils.h"
 #include "fstext/fstext-utils.h"
 #include "fstext/fst-test-utils.h"
+#include "fstext/kaldi-fst-io.h"
 
 #include <fst/script/project.h>
 

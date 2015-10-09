@@ -26,6 +26,7 @@
 #include "fstext/fstext-utils.h"
 #include "fstext/fstext-utils.h"
 #include "fstext/fst-test-utils.h"
+#include "fstext/kaldi-fst-io.h"
 // Just check that it compiles, for now.
 int main(int argc, char **argv) {
   try {
