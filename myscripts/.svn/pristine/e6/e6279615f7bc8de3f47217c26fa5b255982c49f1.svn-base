@@ -1,0 +1,10 @@
+1. run kws_demo_prep
+2. mount -t tmpfs -o size=10G tmpfs /media/kws_service
+3. vim /etc/exportfs
+4. exportfs -rv
+5. (x22) vim nfs.conf; nfs_all.sh mount
+6. run load_indices
+7. run load_post
+8. chmod 777 /media/kws_service/......./online_kws_11
+9. cd /home/serverx24/tomcat8/apache-tomcat-8.0.15/bin; ./startup.sh
+

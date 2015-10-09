@@ -1,0 +1,17 @@
+declare -A systems
+systems=(
+  ['word_plp_smbr']="../204/exp/tri6_nnet_mpe/decode_${datadir}_epoch*"
+  ['word_plp_smbr_ive']="../204/exp/tri6_nnet_mpe/decode_${datadir}_epoch*:ive-4-tri6_nnet-1000-3-0.5"
+  ['word_plp_sgmm']="../204/exp/sgmm5_mmi_b0.1/decode_fmllr_${datadir}_it*"
+  ['word_plp_sgmm_ive']="../204/exp/sgmm5_mmi_b0.1/decode_fmllr_${datadir}_it*:ive-4-tri6_nnet-1000-3-0.5"
+  ['word_bnf_sgmm']="../204/exp_bnf/sgmm7_mmi_b0.1/decode_fmllr_${datadir}_it*"
+  ['word_bnf_sgmm_ive']="../204/exp_bnf/sgmm7_mmi_b0.1/decode_fmllr_${datadir}_it*:ive-4-tri6_nnet-1000-3-0.5"
+  ['word_bnf_ce']="../204/exp_bnf/tri7_nnet/decode_${datadir}"
+  ['word_bnf_ce_ive']="../204/exp_bnf/tri7_nnet/decode_${datadir}:ive-4-tri6_nnet-1000-3-0.5"
+  ['sub_plp_smbr']="../204-subword/exp/tri6_nnet_mpe/decode_${datadir}_epoch*"
+  ['sub6_plp_smbr']="../204-subword6/exp/tri6_nnet_mpe/decode_${datadir}_epoch*"
+  ['sub6_plp_smbr_ive']="../204-subword6/exp/tri6_nnet_mpe/decode_${datadir}_epoch*:ive-4-tri6_nnet-1000-3-0.5-sp"
+  ['syl_plp_smbr']="../204-syllable/exp/tri6_nnet_mpe/decode_${datadir}_epoch*"
+  ['syl_plp_smbr_ive']="../204-syllable/exp/tri6_nnet_mpe/decode_${datadir}_epoch*:ive-4-tri6_nnet-1000-3-0.5-sp"
+  ['phone_plp_smbr']="../204-phone-ngram/exp/tri6_nnet_mpe/decode_${datadir}_epoch1"
+)

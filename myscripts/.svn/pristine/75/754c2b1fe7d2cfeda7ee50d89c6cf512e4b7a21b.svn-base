@@ -1,0 +1,32 @@
+declare -A iv_systems
+iv_systems=(
+  ['word_plp_smbr']="../204/exp/tri6_nnet_mpe/decode_${datadir}_epoch1/kws_10 0.3906"
+  ['word_plp_smbr_ive']="../204/exp/tri6_nnet_mpe/decode_${datadir}_epoch1/kws_ive-4-tri6_nnet-1000-3-0.5_10 0.3997"
+  ['word_plp_sgmm']="../204/exp/sgmm5_mmi_b0.1/decode_fmllr_${datadir}_it4/kws_10 0.3505"
+  ['word_plp_sgmm_ive']="../204/exp/sgmm5_mmi_b0.1/decode_fmllr_${datadir}_it4/kws_ive-4-tri6_nnet-1000-3-0.5_10 0.3701"
+  ['word_bnf_sgmm']="../204/exp_bnf/sgmm7_mmi_b0.1/decode_fmllr_${datadir}_it4/kws_18 0.3723"
+  ['word_bnf_sgmm_ive']="../204/exp_bnf/sgmm7_mmi_b0.1/decode_fmllr_${datadir}_it4/kws_ive-4-tri6_nnet-1000-3-0.5_18 0.3963"
+  ['word_bnf_ce']="../204/exp_bnf/tri7_nnet/decode_${datadir}/kws_15 0.3626"
+  ['word_bnf_ce_ive']="../204/exp_bnf/tri7_nnet/decode_${datadir}/kws_ive-4-tri6_nnet-1000-3-0.5_15 0.3773"
+  ['sub6_plp_smbr']="../204-subword6/exp/tri6_nnet_mpe/decode_${datadir}_epoch1/kws_10 0.4013"
+  ['sub6_plp_smbr_ive']="../204-subword6/exp/tri6_nnet_mpe/decode_${datadir}_epoch1/kws_ive-4-tri6_nnet-1000-3-0.5-sp_10 0.4077"
+  ['syl_plp_smbr']="../204-syllable/exp/tri6_nnet_mpe/decode_${datadir}_epoch1/kws_10 0.3278"
+  ['syl_plp_smbr_ive']="../204-syllable/exp/tri6_nnet_mpe/decode_${datadir}_epoch1/kws_ive-4-tri6_nnet-1000-3-0.5_10 0.3697"
+  ['phone_plp_smbr']="../204-phone-ngram/exp/tri6_nnet_mpe/decode_${datadir}_epoch1/kws_11 0.1814"
+)
+declare -A oov_systems
+oov_systems=(
+  ['word_plp_smbr']="../204/exp/tri6_nnet_mpe/decode_${datadir}_epoch1/oov_kws_10 0.0039"
+  ['word_plp_smbr_ive']="../204/exp/tri6_nnet_mpe/decode_${datadir}_epoch1/oov_kws_ive-4-tri6_nnet-1000-3-0.5_10 0.0032"
+  ['word_plp_sgmm']="../204/exp/sgmm5_mmi_b0.1/decode_fmllr_${datadir}_it4/oov_kws_10 0.0023"
+  ['word_plp_sgmm_ive']="../204/exp/sgmm5_mmi_b0.1/decode_fmllr_${datadir}_it4/oov_kws_ive-4-tri6_nnet-1000-3-0.5_10 0.0027"
+  ['word_bnf_sgmm']="../204/exp_bnf/sgmm7_mmi_b0.1/decode_fmllr_${datadir}_it4/oov_kws_18 0.0029"
+  ['word_bnf_sgmm_ive']="../204/exp_bnf/sgmm7_mmi_b0.1/decode_fmllr_${datadir}_it4/oov_kws_ive-4-tri6_nnet-1000-3-0.5_18 0.0039"
+  ['word_bnf_ce']="../204/exp_bnf/tri7_nnet/decode_${datadir}/oov_kws_15 0.0041"
+  ['word_bnf_ce_ive']="../204/exp_bnf/tri7_nnet/decode_${datadir}/oov_kws_ive-4-tri6_nnet-1000-3-0.5_15 0.0039"
+  ['sub6_plp_smbr']="../204-subword6/exp/tri6_nnet_mpe/decode_${datadir}_epoch1/oov_kws_10 0.0061"
+  ['sub6_plp_smbr_ive']="../204-subword6/exp/tri6_nnet_mpe/decode_${datadir}_epoch1/oov_kws_ive-4-tri6_nnet-1000-3-0.5-sp_10 0.0061"
+  ['syl_plp_smbr']="../204-syllable/exp/tri6_nnet_mpe/decode_${datadir}_epoch1/oov_kws_10 0.0073"
+  ['syl_plp_smbr_ive']="../204-syllable/exp/tri6_nnet_mpe/decode_${datadir}_epoch1/oov_kws_ive-4-tri6_nnet-1000-3-0.5_10 0.0064"
+  ['phone_plp_smbr']="../204-phone-ngram/exp/tri6_nnet_mpe/decode_${datadir}_epoch1/oov_kws_11 0.0047"
+)
