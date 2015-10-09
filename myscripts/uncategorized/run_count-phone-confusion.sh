@@ -4,6 +4,9 @@ set -e
 . cmd.sh
 . path.sh
 
+# chenzp 2014
+# This is for swbd recipe
+
 if [ $# != 3 ]; then
     echo "Usage: $0 <model-name> <data-dir> <decode-dir>"
     echo "e.g. $0 tri4a data/eval_dev decode_eval_dev_viet_tg"

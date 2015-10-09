@@ -448,10 +448,10 @@ void ScalarMixComponent::Init(BaseFloat learning_rate,
                                 int32 const_dim) {
   UpdatableComponent::Init(learning_rate);
   KALDI_ASSERT(block_dim > 0 && param_stddev >= 0.0);
-  KALDI_ASSERT(num_blocks > 0 && num_no_scale_blocks_ >= 0 && num_no_scale_blocks_ <= num_blocks);
+  KALDI_ASSERT(num_blocks > 0 && num_no_scale_blocks >= 0 && num_no_scale_blocks <= num_blocks);
   KALDI_ASSERT(const_dim >= 0);
 
-  weight_params_.Resize(num_blocks);
+  weight_params_.Resize(num_blocks - num_no_scale_blocks);
 
   weight_params_.SetRandn(); // sets to random normally distributed noise.
   weight_params_.Scale(param_stddev);
@@ -496,11 +496,11 @@ void ScalarMixComponent::Read(std::istream &is, bool binary) {
   ExpectToken(is, binary, "<WeightParams>");
   weight_params_.Read(is, binary);
   ExpectToken(is, binary, "</ScalarMixComponent>");
-  KALDI_ASSERT(weight_params_.Dim() == num_blocks_);
+  KALDI_ASSERT(weight_params_.Dim() == num_blocks_ - num_no_scale_blocks_);
   KALDI_ASSERT(num_blocks_ > 0 && num_no_scale_blocks_ >= 0);
   KALDI_ASSERT(num_no_scale_blocks_ < num_blocks_);
   KALDI_ASSERT(block_dim_ > 0);
-  KALDI_ASSERT(const_dim_ > 0);
+  KALDI_ASSERT(const_dim_ >= 0);
 }
 
 void ScalarMixComponent::Write(std::ostream &os, bool binary) const {

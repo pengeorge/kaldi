@@ -1,15 +1,19 @@
 #!/bin/bash
 
+# chenzp, 2015
+# Test LM mixing performance on various weights
+
 set -e
 
 lm_only=true
 ext=bbnucoluc100w5+.kn
 ext_for_mix=bbnucoluc100w5+bbnucoluc100w5-VLLP.kn
 skip_kws=true
+lambda_set=7
 
 . ./utils/parse_options.sh
 
-for lambda in 7; do
+for lambda in $lambda_set ; do
   ./run-4-ext-LEX-mix-LM-decode.sh --dir dev10h.pem --ext ${ext} \
     --ext-for-mix ${ext_for_mix} --org-lm-lambda 0.${lambda} --lm-only true
 

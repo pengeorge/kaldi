@@ -20,7 +20,7 @@ bnf_nnet_list=
 #Options for run-3c (train)
 splice_width=0
 do_lda=true  # LDA in NN
-feat_mix= # vector_weight/scalar_weight
+feat_mix= # vector_mix/scalar_mix
 feat_mix_block_dim=42
 feat_mix_const_dim=40
 feat_mix_num_blocks=4 
@@ -36,6 +36,11 @@ echo "$0 $@"
 # Some options which may not be an option
 feat_type=raw  # for run-3c (train)
 # End
+
+if [ "$feat_mix" == full_conn ]; then
+  echo "full_conn is to transform concated feats to block_dim first and then transform again to next layer. This performance is bad. Don't run !"
+  exit 1;
+fi
 
 # Concat feats
 ./run-2c-concate-bnf-feats.sh --server "$server" --dirid "$dirid" --transform-dir "$transform_dir" \

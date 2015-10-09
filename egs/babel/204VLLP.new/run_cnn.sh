@@ -1,1 +1,1 @@
-../204VLLP.v1/run_cnn.sh
+../recipes/run_cnn.sh

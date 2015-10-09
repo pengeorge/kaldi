@@ -23,8 +23,6 @@ num_frames_shrink=2000 # note: must be <= --num-frames-diagnostic option to get_
 final_learning_rate_factor=0.5 # Train the two last layers of parameters half as
                                # fast as the other layers.
 
-hidden_layer_dim=1024 #  You may want this larger, e.g. 1024 or 2048.
-
 bottleneck_dim=42  # bottleneck layer dimension
 minibatch_size=128 # by default use a smallish minibatch size for neural net
                    # training; this controls instability which would otherwise
@@ -76,10 +74,11 @@ transform_dir=
 nj=
 
 feat_const_dim=0
-pnorm_input_dim=2000
+hidden_layer_dim=1024 # useful only if unit_type=tanh. You may want this larger, e.g. 1024 or 2048.
+pnorm_input_dim=2000  # useful only if unit_type=pnorm
 pnorm_output_dim=200
 p=2
-unit_type=pnorm  # tanh/pnorm, pnorm is 0.6% better
+unit_type=tanh  # tanh/pnorm, pnorm is 0.6% better
 mix_type=full  # full/vector/scalar
 # End configuration section.
 
@@ -170,14 +169,40 @@ cmvn_opts=`cat $alidir/cmvn_opts 2>/dev/null`
 cp $alidir/cmvn_opts $dir 2>/dev/null
 cp $alidir/tree $dir
 
-if [ -z "$unit_type" ] || [ $unit_type == tanh ]; then
-  truncate_comp_num=$[2*$num_hidden_layers]
-elif [ $unit_type == pnorm ]; then
-  truncate_comp_num=$[3*$num_hidden_layers-1]
-else
-  echo "unit type $unit_type not supported"
-  exit 1;
+if [ -z "$mix_type" ]; then
+  mix_type=full
 fi
+
+case $mix_type in
+  full)
+    ;;
+  vector)
+    ;;
+  scalar)
+    ;;
+  *)
+    echo "Unknown mix_type: $mix_type"
+    exit 1;
+esac
+
+if [ -z "$unit_type" ]; then
+  unit_type=tanh
+fi
+
+case $unit_type in
+  tanh)
+    truncate_comp_num=$[2*$num_hidden_layers]
+    nonlinear_input_dim=$hidden_layer_dim
+    ;;
+  pnorm)
+    truncate_comp_num=$[3*$num_hidden_layers-1]
+    nonlinear_input_dim=$pnorm_input_dim
+    ;;
+  *)
+    echo "Unknown unit_type: $unit_type"
+    exit 1;
+esac
+
 if [ ! -z "$lda_mat" ]; then
   truncate_comp_num=$[truncate_comp_num+1]
   lda_dim=`cat $(dirname $lda_mat)/lda_dim` || exit 1;
@@ -228,7 +253,7 @@ if [ $stage -le -2 ]; then
   echo "$0: initializing neural net";
 
 
-  stddev=`perl -e "print 1.0/sqrt($hidden_layer_dim);"`
+  stddev=`perl -e "print 1.0/sqrt($nonlinear_input_dim);"`
   cat >$dir/nnet.config <<EOF
 SpliceComponent input-dim=$ul_feat_dim left-context=$splice_width right-context=$splice_width const-component-dim=0
 EOF
@@ -242,50 +267,100 @@ EOF
     next_trans_input_dim=$[$ul_feat_dim * (2*$splice_width + 1)]
   fi
 
-  bottleneck_stddev=`perl -e "print 1.0/sqrt($bottleneck_dim);"`
-  if [ -z "$unit_type" ] || [ $unit_type == tanh ]; then
-    cat >>$dir/nnet.config <<EOF
+  case $unit_type in
+    tanh)
+      cat >>$dir/nnet.config <<EOF
 AffineComponentPreconditioned input-dim=$next_trans_input_dim output-dim=$hidden_layer_dim alpha=$alpha max-change=$max_change learning-rate=$initial_learning_rate param-stddev=$stddev bias-stddev=$bias_stddev
 TanhComponent dim=$hidden_layer_dim
 AffineComponentPreconditioned input-dim=$hidden_layer_dim output-dim=$num_leaves alpha=$alpha max-change=$max_change learning-rate=$initial_learning_rate param-stddev=0 bias-stddev=0
 SoftmaxComponent dim=$num_leaves
 EOF
-    # to hidden.config it will write the part of the config corresponding to a
-    # single hidden layer; we need this to add new layers. 
-    cat >$dir/hidden.config <<EOF
+      # to hidden.config it will write the part of the config corresponding to a
+      # single hidden layer; we need this to add new layers. 
+      cat >$dir/hidden.config <<EOF
 AffineComponentPreconditioned input-dim=$hidden_layer_dim output-dim=$hidden_layer_dim alpha=$alpha max-change=$max_change learning-rate=$initial_learning_rate param-stddev=$stddev bias-stddev=$bias_stddev
 TanhComponent dim=$hidden_layer_dim
 EOF
-    # bnf.config it will write the part of th config corresponding to a
-    # bottleneck layer; we need this to add bottleneck layer.
-    cat >$dir/bnf.config <<EOF
+      # bnf.config it will write the part of th config corresponding to a
+      # bottleneck layer; we need this to add bottleneck layer.
+      cat >$dir/bnf.config <<EOF
 AffineComponentExt trans-input-dim=$hidden_layer_dim trans-output-dim=$bottleneck_dim const-component-dim=$feat_const_dim learning-rate=$initial_learning_rate param-stddev=$stddev bias-stddev=$bias_stddev
-AffineComponentPreconditioned input-dim=$[bottleneck_dim+feat_const_dim] output-dim=$hidden_layer_dim alpha=$alpha max-change=$max_change learning-rate=$initial_learning_rate param-stddev=$bottleneck_stddev bias-stddev=$bias_stddev
-TanhComponent dim=$hidden_layer_dim
 EOF
-  elif [ $unit_type == pnorm ]; then
-    cat >>$dir/nnet.config <<EOF
+      ;;
+    pnorm)
+      cat >>$dir/nnet.config <<EOF
 AffineComponentPreconditioned input-dim=$next_trans_input_dim output-dim=$pnorm_input_dim alpha=$alpha max-change=$max_change learning-rate=$initial_learning_rate param-stddev=$stddev bias-stddev=$bias_stddev
 PnormComponent input-dim=$pnorm_input_dim output-dim=$pnorm_output_dim p=$p
 NormalizeComponent dim=$pnorm_output_dim
 AffineComponentPreconditioned input-dim=$pnorm_output_dim output-dim=$num_leaves alpha=$alpha max-change=$max_change learning-rate=$initial_learning_rate param-stddev=0 bias-stddev=0
 SoftmaxComponent dim=$num_leaves
 EOF
-    cat >$dir/hidden.config <<EOF
+      cat >$dir/hidden.config <<EOF
 AffineComponentPreconditioned input-dim=$pnorm_output_dim output-dim=$pnorm_input_dim alpha=$alpha max-change=$max_change learning-rate=$initial_learning_rate param-stddev=$stddev bias-stddev=$bias_stddev
 PnormComponent input-dim=$pnorm_input_dim output-dim=$pnorm_output_dim p=$p
 NormalizeComponent dim=$pnorm_output_dim
 EOF
-    cat >$dir/bnf.config <<EOF
+      cat >$dir/bnf.config <<EOF
 AffineComponentExt trans-input-dim=$pnorm_output_dim trans-output-dim=$bottleneck_dim const-component-dim=$feat_const_dim learning-rate=$initial_learning_rate param-stddev=$stddev bias-stddev=$bias_stddev
-AffineComponentPreconditioned input-dim=$[bottleneck_dim+feat_const_dim] output-dim=$pnorm_input_dim alpha=$alpha max-change=$max_change learning-rate=$initial_learning_rate param-stddev=$bottleneck_stddev bias-stddev=$bias_stddev
+EOF
+      ;;
+    *) 
+      echo "Unknown unit_type: $unit_type"
+      exit 1;
+  esac
+
+  # Mixing layer
+  case $mix_type in
+    full)
+      comb_bottleneck_stddev=`perl -e "print 1.0/sqrt($bottleneck_dim+$feat_const_dim);"`
+      cat >>$dir/bnf.config <<EOF
+AffineComponentPreconditioned input-dim=$[bottleneck_dim+feat_const_dim] output-dim=$nonlinear_input_dim alpha=$alpha max-change=$max_change learning-rate=$initial_learning_rate param-stddev=$comb_bottleneck_stddev bias-stddev=$bias_stddev
+EOF
+      ;;
+    vector)
+      comb_bottleneck_stddev=`perl -e "print 1.0/sqrt($bottleneck_dim)"`
+      if [ $feat_const_dim -ne 0 ]; then # if not first language
+        bottleneck_stddev=`perl -e "print 1.0/sqrt($feat_const_dim/$bottleneck_dim + 1);"`
+        cat >>$dir/bnf.config <<EOF
+VectorMixComponent block-dim=$bottleneck_dim num-blocks=$[$feat_const_dim/$bottleneck_dim + 1] const-component-dim=0 param-stddev=$bottleneck_stddev
+EOF
+      fi
+      cat >>$dir/bnf.config <<EOF
+AffineComponentPreconditioned input-dim=$bottleneck_dim output-dim=$nonlinear_input_dim alpha=$alpha max-change=$max_change learning-rate=$initial_learning_rate param-stddev=$comb_bottleneck_stddev bias-stddev=$bias_stddev
+EOF
+      ;;
+    scalar)
+      comb_bottleneck_stddev=`perl -e "print 1.0/sqrt($bottleneck_dim)"`
+      if [ $feat_const_dim -ne 0 ]; then # if not first language
+        bottleneck_stddev=`perl -e "print 1.0/sqrt($feat_const_dim/$bottleneck_dim);"`
+        cat >>$dir/bnf.config <<EOF
+ScalarMixComponent block-dim=$bottleneck_dim num-blocks=$[$feat_const_dim/$bottleneck_dim + 1] num-no-scale-blocks=1 const-component-dim=0 param-stddev=$bottleneck_stddev
+EOF
+      fi
+      cat >>$dir/bnf.config <<EOF
+AffineComponentPreconditioned input-dim=$bottleneck_dim output-dim=$nonlinear_input_dim alpha=$alpha max-change=$max_change learning-rate=$initial_learning_rate param-stddev=$comb_bottleneck_stddev bias-stddev=$bias_stddev
+EOF
+      ;;
+    *)
+      exit 1;
+  esac
+
+  # Append nonlinear unit on the mixing layer
+  case $unit_type in
+    tanh)
+      cat >>$dir/bnf.config <<EOF
+TanhComponent dim=$hidden_layer_dim
+EOF
+      ;;
+    pnorm)
+      cat >>$dir/bnf.config <<EOF
 PnormComponent input-dim=$pnorm_input_dim output-dim=$pnorm_output_dim p=$p
 NormalizeComponent dim=$pnorm_output_dim
 EOF
-  else 
-    echo "Not supported unit type: $unit_type"
-    exit 1;
-  fi
+      ;;
+    *)
+      exit 1;
+  esac
 
   $cmd $dir/log/nnet_init.log \
     nnet-am-init $alidir/tree $lang/topo "nnet-init $dir/nnet.config -|" \

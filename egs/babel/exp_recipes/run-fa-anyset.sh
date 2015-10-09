@@ -3,6 +3,9 @@ set -e
 set -o pipefail
 set -u
 
+# chenzp 2014
+# Force alignment on the specified dataset with the specified model.
+
 . conf/common_vars.sh
 . ./lang.conf
 

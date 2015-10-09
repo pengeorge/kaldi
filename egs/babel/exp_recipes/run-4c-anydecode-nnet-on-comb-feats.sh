@@ -373,7 +373,7 @@ if [ -f $exp_dir/sgmm7/.done ]; then
   done
 fi
 
-suffixes=".no_lda.vector_mix .no_lda.full_conn"
+suffixes=".no_lda.vector_mix .no_lda.full_conn .no_lda.scalar_mix"
 for suffix in '' $suffixes; do
   if [ -f $exp_dir/tri7_nnet${suffix}/.done ]; then
   #    [[ ( ! $exp_dir/tri7_nnet/decode_${dirid}/.done -nt $datadir/.done)  || \

@@ -20,9 +20,7 @@ boost_silence_in_vad=1.0 # used for *.seg
 # Systems for semisup data selection
 sys_to_decode="" # " sgmm_mmi tri6_nnet_mpe cnn_dnn_smbr lstm " # sat is always needed decoding
 sys_to_kws_stt=" "
-if [ -z $final_mdl ]; then
-  final_mdl=exp/dnn_scratch_6langFLPNN.raw_cont
-fi
+final_mdl=
 # For quick validation
 #sys_to_kws_stt=" sat "
 
@@ -129,6 +127,10 @@ if [ -f $lockfile ]; then
   exit 1;
 fi
 touch $lockfile
+
+if [ -z $final_mdl ]; then
+  final_mdl=exp/dnn_scratch_6langFLPNN.raw_cont
+fi
 
 #This seems to be the only functioning way how to ensure the comple
 #set of scripts will exit when sourcing several of them together
@@ -929,7 +931,7 @@ done
 ## DNN ("compatibility") decoding -- also, just decode the "default" net
 ##
 ####################################################################
-tri6_nnet_suffixes="_3hid"
+tri6_nnet_suffixes="_3hid .out_dim_stddev"
 for tri6_nnet_suffix in '' $tri6_nnet_suffixes; do
 if [[ "$sys_to_decode" =~ " tri6_nnet${tri6_nnet_suffix} " ]] || [[ "$sys_to_decode" =~ " exp/tri6_nnet${tri6_nnet_suffix} " ]]; then
   if [ `basename $(readlink -f exp/tri6_nnet${tri6_nnet_suffix})` != "tri6b_nnet" ] \

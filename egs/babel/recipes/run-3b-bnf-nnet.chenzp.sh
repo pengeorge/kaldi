@@ -24,6 +24,12 @@ suffix=
 
 . ./utils/parse_options.sh
 
+echo "This script is not recommended by chenzp. Use run-3b-bnf-nnet-fast.sh instead"
+echo "On 202VLLP (based on 4lang10hr_5hid.raw), using run-3b-bnf-nnet-fast.sh is 0.4 point better"
+echo "  , and gains further 1.1 points if change splice_width from 5 to 0 and change lda_dim from "
+echo "  100 to '' (i.e., no dim reducing)"
+exit 1;
+
 if [ -z "$unsup_string" ]; then
   if $semisupervised ; then
     unsup_string="_semisup"

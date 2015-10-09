@@ -2,6 +2,9 @@
 
 set -e
 
+# chenzp 2015
+# This is an earlier version of modify OOC prob, deprecated. See modify_OOC_prob2.sh.
+
 inlm=./data/srilm_bbnucoluc100w5+.kn/lm.gz
 outlm=./data/srilm_bbnucoluc100w5+.knModOOCbyPPL/lm.gz
 score_file=./ppl_info.txt

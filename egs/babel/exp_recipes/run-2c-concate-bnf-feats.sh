@@ -75,7 +75,7 @@ for bn in $bnf_nnet_list; do
     echo "BN $bn is not ready."
     exit 1;
   fi
-  bnid=$(echo $bn | perl -e '$path=<>; $path =~ s:.*?([^/]+)/(exp_bnf[^/]*)/tri6_bnf.*:\1__\2:; print $path;')
+  bnid=$(echo $bn | perl -e '$path=<>; $path =~ s:.*?([^/]+)/([^/]*)/tri6_bnf.*:\1__\2:; print $path;')
   echo "Processing $bnid"
   if [ ! -f $data_dir/$bnid/${dirid}/.done ]; then
     mkdir -p $param_dir/$bnid

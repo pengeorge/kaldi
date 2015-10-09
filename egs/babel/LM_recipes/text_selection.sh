@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# chenzp 2015
+# Scoring sentences in extra text and keep top scored ones based on a score threshold or a specific ratio. Using XenC toolkit for scoring. (Mode 1: PPL;  Mode 2: Diff. CE)
+
 src=bbnucoluc100w5
 lmdir=./data/srilm_kn
 srclm_flag=kn

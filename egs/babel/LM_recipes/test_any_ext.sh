@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# chenzp 2015
+# Seems to be an earlier version of test_any_ext.any_smooth.sh. I can't remember clearly.
+
 ext_set=' +FLP FLP+ FLP-colv8+FLP FLP '
 for ext in $ext_set; do
   echo "Processing ext: $ext"

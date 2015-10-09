@@ -17,8 +17,9 @@ set -e
 set -o pipefail
 set -u
 
-splice_width=5
+splice_width=0
 
+exp_dir=
 semisupervised=true
 dnn_train_stage=-100
 unsup_string=
@@ -35,8 +36,11 @@ if [ -z "$unsup_string" ]; then
     unsup_string=""  #" ": supervised training, _semi_supervised: unsupervised BNF training
   fi
 fi
-exp_dir=exp_bnf${unsup_string}${suffix}
-data_bnf_dir=data_bnf${unsup_string}${suffix}
+
+if [ -z "$exp_dir" ]; then
+  exp_dir=exp_bnf${unsup_string}${suffix}
+fi
+data_bnf_dir=`echo $exp_dir | sed 's/exp/data/'`   #data_bnf${unsup_string}${suffix}
 
 if [ ! -e $exp_dir/tri6/.done ]; then
   echo "$0: $exp_dir/tri6/.done does not exist"

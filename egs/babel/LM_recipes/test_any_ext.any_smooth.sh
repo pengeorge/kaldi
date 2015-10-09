@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# chenzp 2015
+# Generating required resource for some 'ext' types specifying the lexicon, text corpus, gram order and smoothing type. Optionally estimate N_true for new words.
+
 datatype=dev10h.pem
 vocab_sort_via_kws=false
 lm_only=false

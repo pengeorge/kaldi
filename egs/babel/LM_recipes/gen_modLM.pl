@@ -1,24 +1,48 @@
 #!/usr/bin/perl
 
 use strict;
-if ($#ARGV != 1) {
-  die "Usage: $0 <in-LM> lambda < ppl-info-file\n";
+if ($#ARGV != 4) {
+  die "Usage: $0 <in-LM> lambda <score-col-idx> <score-type> <zipf-or-not> < ppl-info-file\n";
 }
 my $lambda = $ARGV[1];
+my $score_col_idx = $ARGV[2];
+my $score_type = $ARGV[3];
+my $zipf = $ARGV[4];
 
 my %score;
 my $totalProb = 0;
 my $numOOC = 0;
+my $log10 = log(10);
 while (<STDIN>) {
   chomp;
   my @col = split(/\t/, $_);
-  my $s = -$col[2];
-  #print STDERR "$col[0]\t$s\n";
+  my $s = $col[$score_col_idx];
+  # print STDERR "$col[0]\t$s\n";
+  # We store log value of scores 
+  if ($score_type eq "-log") {
+    $s = -$s;
+  } elsif ($score_type eq "raw") {
+    $s = log($s) / $log10;
+  }
   $score{$col[0]} = $s;
+  #print STDERR "$s\n";
   $totalProb += 10 ** $s;
+  #print STDERR "$totalProb\n";
   $numOOC++;
 }
-my $log10 = log(10);
+
+if ($zipf eq "true") {
+  print STDERR "zipf on. Reset probs according to ranking\n";
+  $totalProb = 0;
+  my %tmp_score = %score;
+  my $n = 1;
+  foreach my $w (sort {$tmp_score{$b} <=> $tmp_score{$a}} keys %tmp_score) {
+    $score{$w} = -log($n) / $log10;
+    $totalProb += 1/$n;
+    $n++;
+  }
+}
+
 my $logNumOOC = log($numOOC) / $log10;
 my $logTotalProb = log($totalProb) / $log10;
 print STDERR "log(|OOC|) = $logNumOOC\n";
@@ -75,13 +99,17 @@ while (<LM>) {
 }
 print STDERR "max_OOC log P(w) = log P($smax_w) = $smax\n";
 print STDERR "min_IC log P(w) = log P($minIC_w) = $minIC\n";
+my $old_minIC = $minIC;
 $minIC = $lambda * $minIC + (1 - $lambda) * $logPooc;
-print STDERR "min_IC = lambda * (min_IC - log Pooc) + log Pooc = $minIC\n";
+print STDERR "min_IC = lambda * (min_IC - log Pooc) + log Pooc\n";
+print STDERR "       = $lambda * ($old_minIC - $logPooc) + $logPooc\n";
+print STDERR "       = $minIC\n";
 
 # Looking for solution
 my $bmin = 0.0;
-my $bmax = 1.0;
+my $bmax = 100000;
 my $target = $logNumOOC + $logPooc - $minIC;
+print STDERR "target = $target = $logNumOOC + $logPooc - $minIC\n";
 my @sorted_keys_snorm = sort {$snorm{$a} <=> $snorm{$b}} keys %snorm;
 my %log_pw_div_pm;
 foreach my $w (@sorted_keys_snorm) {
@@ -89,7 +117,7 @@ foreach my $w (@sorted_keys_snorm) {
 }
 my $result = $target + 1;
 my $b = 0;
-print STDERR "Looking for solution of alpha, beta.......\n";
+print STDERR "Looking for solution of beta.......\n";
 do {
   if ($result > $target) {
     $bmin = $b;

@@ -26,6 +26,7 @@ num_iters_final=20 # Maximum number of final iterations to give to the
 initial_learning_rate=0.04
 final_learning_rate=0.004
 bias_stddev=0.5
+hidden_layer_dim=1024
 pnorm_input_dim=3000 
 pnorm_output_dim=300
 p=2
@@ -51,12 +52,9 @@ shuffle_buffer_size=5000 # This "buffer_size" variable controls randomization of
                 # since in the preconditioning method, 2 samples in the same minibatch can
                 # affect each others' gradients.
 
-add_layers_period=2 # by default, add new layers every 2 iterations.
-num_hidden_layers=3
 stage=-5
 
 io_opts="-tc 5" # for jobs with a lot of I/O, limits the number running at one time.   These don't
-splice_width=4 # meaning +- 4 frames on each side for second LDA
 randprune=4.0 # speeds up LDA.
 alpha=4.0 # relates to preconditioning.
 update_period=4 # relates to online preconditioning: says how often we update the subspace.
@@ -87,10 +85,10 @@ cmvn_opts=  # will be passed to get_egs.sh, if supplied.
 feat_type=  # Can be used to force "raw" features.
 prior_subset_size=10000 # 10k samples per job, for computing priors.  Should be
                         # more than enough.
+unit_type=
 feat_mix= # vector_mix/scalar_mix
 feat_mix_block_dim=42
-feat_mix_const_dim=40
-feat_mix_num_blocks=4
+feat_mix_const_dim=0
 # End configuration section.
 
 
@@ -173,6 +171,26 @@ mkdir -p $dir/log
 echo $nj > $dir/num_jobs
 cp $alidir/tree $dir
 
+if [ -z "$unit_type" ]; then
+  unit_type=tanh
+fi
+
+case $unit_type in
+  tanh)
+    truncate_comp_num=2
+    nonlinear_input_dim=$hidden_layer_dim
+    ;;
+  pnorm)
+    truncate_comp_num=2
+    nonlinear_input_dim=$pnorm_input_dim
+    ;;
+  *)
+    echo "Unknown unit_type: $unit_type"
+    exit 1;
+esac
+
+splice_width=0 # force 0
+
 extra_opts=()
 [ ! -z "$cmvn_opts" ] && extra_opts+=(--cmvn-opts "$cmvn_opts")
 [ ! -z "$feat_type" ] && extra_opts+=(--feat-type $feat_type)
@@ -200,10 +218,6 @@ iters_per_epoch=`cat $egs_dir/iters_per_epoch`  || exit 1;
 num_jobs_nnet=`cat $egs_dir/num_jobs_nnet` || exit 1;
 
 
-if ! [ $num_hidden_layers -ge 1 ]; then
-  echo "Invalid num-hidden-layers $num_hidden_layers"
-  exit 1
-fi
 
 if [ $stage -le -2 ]; then
   echo "$0: initializing neural net";
@@ -217,72 +231,69 @@ if [ $stage -le -2 ]; then
 SpliceComponent input-dim=$tot_input_dim left-context=$splice_width right-context=$splice_width const-component-dim=0
 EOF
 
-  if [ -z "$feat_mix" ]; then # normal pnorm layer
-    cat >>$dir/nnet.config <<EOF
-AffineComponentPreconditionedOnline input-dim=$splice_output_dim output-dim=$pnorm_input_dim $online_preconditioning_opts learning-rate=$initial_learning_rate param-stddev=$stddev bias-stddev=$bias_stddev
-PnormComponent input-dim=$pnorm_input_dim output-dim=$pnorm_output_dim p=$p
-NormalizeComponent dim=$pnorm_output_dim
-EOF
-  else
-    feat_mix_input_dim=`perl -e "print ($feat_mix_block_dim * $feat_mix_num_blocks + $feat_mix_const_dim);"`
-    if [ $splice_output_dim != $feat_mix_input_dim ]; then
-      echo "ERROR: splice_output_dim ($splice_output_dim) != feat_mix_input_dim ($feat_mix_output_dim)"
-      exit 1;
-    fi
-    #TODO making VectorMixComponent support frame splicing
-    if [ $splice_width -ne 0 ]; then
-      echo "ERROR: VectorMixComponent does not support spliced inputs"
-      exit 1;
-    fi
-    feat_mix_output_dim=$[feat_mix_block_dim+feat_mix_const_dim]
-    case "$feat_mix" in
-      full_conn)
-      echo "full_conn is to transform concated feats to block_dim first and then transform again to next layer. This performance is bad. DON'T RUN !"
+  feat_mix_num_blocks=$[($tot_input_dim - $feat_mix_const_dim) / $feat_mix_block_dim ]
+  feat_mix_input_dim=$tot_input_dim
+  if [ $splice_output_dim != $feat_mix_input_dim ]; then
+    echo "ERROR: splice_output_dim ($splice_output_dim) != feat_mix_input_dim ($feat_mix_output_dim)"
+    exit 1;
+  fi
+  #TODO making VectorMixComponent support frame splicing
+  if [ $splice_width -ne 0 ]; then
+    echo "ERROR: VectorMixComponent does not support spliced inputs"
+    exit 1;
+  fi
+  feat_mix_output_dim=$[feat_mix_block_dim+feat_mix_const_dim]
+
+  case "$feat_mix" in
+    full_conn)
+      mix_stddev=`perl -e "print 1.0/sqrt($feat_mix_block_dim * $feat_mix_num_blocks);"`
+      mix_next_stddev=`perl -e "print 1.0/sqrt($feat_mix_output_dim);"`
       cat >>$dir/nnet.config <<EOF
-AffineComponentExt trans-input-dim=$[$feat_mix_block_dim * $feat_mix_num_blocks] trans-output-dim=$feat_mix_block_dim const-component-dim=$feat_mix_const_dim learning-rate=$initial_learning_rate param-stddev=$stddev bias-stddev=$bias_stddev
-AffineComponentPreconditionedOnline input-dim=$feat_mix_output_dim output-dim=$pnorm_input_dim $online_preconditioning_opts learning-rate=$initial_learning_rate param-stddev=$stddev bias-stddev=$bias_stddev
-PnormComponent input-dim=$pnorm_input_dim output-dim=$pnorm_output_dim p=$p
-NormalizeComponent dim=$pnorm_output_dim
+AffineComponentExt trans-input-dim=$[$feat_mix_block_dim * $feat_mix_num_blocks] trans-output-dim=$feat_mix_block_dim const-component-dim=$feat_mix_const_dim learning-rate=$initial_learning_rate param-stddev=$mix_stddev bias-stddev=$bias_stddev
+AffineComponentPreconditionedOnline input-dim=$feat_mix_output_dim output-dim=$nonlinear_input_dim $online_preconditioning_opts learning-rate=$initial_learning_rate param-stddev=$mix_next_stddev bias-stddev=$bias_stddev
 EOF
       ;;
-      vector_mix)
+    vector_mix)
       mix_stddev=`perl -e "print 1.0/sqrt($feat_mix_num_blocks);"`
       mix_next_stddev=`perl -e "print 1.0/sqrt($feat_mix_output_dim);"`
       cat >>$dir/nnet.config <<EOF
 VectorMixComponent block-dim=$feat_mix_block_dim num-blocks=$feat_mix_num_blocks const-component-dim=$feat_mix_const_dim learning-rate=$initial_learning_rate param-stddev=$mix_stddev bias-stddev=$bias_stddev
-AffineComponentPreconditionedOnline input-dim=$feat_mix_output_dim output-dim=$pnorm_input_dim $online_preconditioning_opts learning-rate=$initial_learning_rate param-stddev=$mix_next_stddev bias-stddev=$bias_stddev
-PnormComponent input-dim=$pnorm_input_dim output-dim=$pnorm_output_dim p=$p
-NormalizeComponent dim=$pnorm_output_dim
+AffineComponentPreconditionedOnline input-dim=$feat_mix_output_dim output-dim=$nonlinear_input_dim $online_preconditioning_opts learning-rate=$initial_learning_rate param-stddev=$mix_next_stddev bias-stddev=$bias_stddev
 EOF
       ;;
-      scalar_mix)
+    scalar_mix)
       mix_stddev=`perl -e "print 1.0/sqrt($feat_mix_num_blocks);"`
       mix_next_stddev=`perl -e "print 1.0/sqrt($feat_mix_output_dim);"`
       cat >>$dir/nnet.config <<EOF
 ScalarMixComponent block-dim=$feat_mix_block_dim num-blocks=$feat_mix_num_blocks num-no-scale-blocks=0 const-component-dim=$feat_mix_const_dim learning-rate=$initial_learning_rate param-stddev=$mix_stddev
-AffineComponentPreconditionedOnline input-dim=$feat_mix_output_dim output-dim=$pnorm_input_dim $online_preconditioning_opts learning-rate=$initial_learning_rate param-stddev=$mix_next_stddev bias-stddev=$bias_stddev
-PnormComponent input-dim=$pnorm_input_dim output-dim=$pnorm_output_dim p=$p
-NormalizeComponent dim=$pnorm_output_dim
+AffineComponentPreconditionedOnline input-dim=$feat_mix_output_dim output-dim=$nonlinear_input_dim $online_preconditioning_opts learning-rate=$initial_learning_rate param-stddev=$mix_next_stddev bias-stddev=$bias_stddev
 EOF
       ;;
-      *)
-        echo "Unknown feat_mix type: $feat_mix"
-        exit 1;
-    esac
-  fi
+    *)
+      echo "Unknown feat_mix type: $feat_mix"
+      exit 1;
+  esac
 
-  cat >>$dir/nnet.config <<EOF
+  case $unit_type in
+    tanh)
+      cat >>$dir/nnet.config <<EOF
+TanhComponent dim=$hidden_layer_dim
+AffineComponentPreconditionedOnline input-dim=$hidden_layer_dim output-dim=$num_leaves $online_preconditioning_opts learning-rate=$initial_learning_rate param-stddev=0 bias-stddev=0
+SoftmaxComponent dim=$num_leaves
+EOF
+      ;;
+    pnorm)
+      cat >>$dir/nnet.config <<EOF
+PnormComponent input-dim=$pnorm_input_dim output-dim=$pnorm_output_dim p=$p
+NormalizeComponent dim=$pnorm_output_dim
 AffineComponentPreconditionedOnline input-dim=$pnorm_output_dim output-dim=$num_leaves $online_preconditioning_opts learning-rate=$initial_learning_rate param-stddev=0 bias-stddev=0
 SoftmaxComponent dim=$num_leaves
 EOF
+      ;;
+    *)
+    exit 1;
+  esac
 
-  # to hidden.config it will write the part of the config corresponding to a
-  # single hidden layer; we need this to add new layers. 
-  cat >$dir/hidden.config <<EOF
-AffineComponentPreconditionedOnline input-dim=$pnorm_output_dim output-dim=$pnorm_input_dim $online_preconditioning_opts learning-rate=$initial_learning_rate param-stddev=$stddev bias-stddev=$bias_stddev
-PnormComponent input-dim=$pnorm_input_dim output-dim=$pnorm_output_dim p=$p
-NormalizeComponent dim=$pnorm_output_dim
-EOF
   $cmd $dir/log/nnet_init.log \
     nnet-am-init $alidir/tree $lang/topo "nnet-init $dir/nnet.config -|" \
     $dir/0.mdl || exit 1;
@@ -331,6 +342,8 @@ echo "$0: $num_iters_reduce + $num_iters_extra = $num_iters iterations, "
 echo "$0: (while reducing learning rate) + (with constant learning rate)."
 echo "$0: Will not do mix up"
 
+finish_add_layers_iter=0
+
 function set_target_objf_change {
   # nothing to do if $target_multiplier not set.
   [ "$target_multiplier" == "0" -o "$target_multiplier" == "0.0" ] && return;
@@ -353,7 +366,6 @@ function set_target_objf_change {
   done
 }
 
-finish_add_layers_iter=$[$num_hidden_layers * $add_layers_period]
 # This is when we decide to mix up from: halfway between when we've finished
 # adding the hidden layers and the end of training.
 mix_up_iter=$[($num_iters + $finish_add_layers_iter)/2]
@@ -391,20 +403,8 @@ while [ $x -lt $num_iters ]; do
     
     echo "Training neural net (pass $x)"
 
-    if [ $x -gt 0 ] && \
-      [ $x -le $[($num_hidden_layers-1)*$add_layers_period] ] && \
-      [ $[($x-1) % $add_layers_period] -eq 0 ]; then
-      
-      inp=`nnet-am-info $dir/$x.mdl | grep 'Softmax' | awk '{print $2}'`
-      if [ "$presoftmax_prior_scale_power" != "0.0" ]; then
-        inp=$[$inp-2]
-      else
-        inp=$[$inp-1]
-      fi
-      mdl="nnet-init --srand=$x $dir/hidden.config - | nnet-insert --insert-at=$inp $dir/$x.mdl - - |"
-    else
-      mdl=$dir/$x.mdl
-    fi
+    mdl=$dir/$x.mdl
+
     if [ $x -eq 0 ] || [ "$mdl" != "$dir/$x.mdl" ]; then
       # on iteration zero or when we just added a layer, use a smaller minibatch
       # size and just one job: the model-averaging doesn't seem to be helpful
@@ -550,4 +550,14 @@ if $cleanup; then
   if [ $egs_dir == "$dir/egs" ]; then
     steps/nnet2/remove_egs.sh $dir/egs
   fi
+fi
+if [ -f $dir/final.mdl ]; then
+  if [ $feat_const_dim -eq 0 ]; then
+    nnet-to-raw-nnet --truncate=$truncate_comp_num $dir/final.mdl $dir/final.raw
+  else
+    nnet-to-raw-nnet --truncate=$truncate_comp_num $dir/final.mdl - |\
+      nnet-reset-const-component --const-dim-to-reduce=$feat_const_dim --const-dim=0 - $dir/final.raw
+  fi
+else 
+  echo "$0: we require final.mdl in source dir $dir"
 fi

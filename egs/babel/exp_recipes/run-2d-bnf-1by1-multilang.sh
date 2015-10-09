@@ -12,7 +12,7 @@ io_opts="-tc 5" # for jobs with a lot of I/O, limits the number running at one t
 cmvn_opts=  # will be passed to get_lda.sh and get_egs.sh, if supplied.  
             # only relevant for "raw" features, not lda.
 do_lda=true
-splice_width=6
+splice_width=6 # for single lang NN training
 samples_per_iter=200000
 ################################
 
@@ -182,7 +182,7 @@ for l in `seq 0 $[num_lang-1]`; do
   if [ ! -f $dir/.done ]; then
     mkdir -p $dir
     czpScripts/nnet2/train_bottleneck.for1by1.sh \
-      --unit-type "$unit_type" \
+      --unit-type "$unit_type" --mix-type "$mix_type" \
       --feat-type $feat_type --splice-width $splice_width \
       $lda_opts --unilingual-egs-dir $egs_dir $bnf_dim_opts \
       --stage $train_stage --num-jobs-nnet $bnf_num_jobs \

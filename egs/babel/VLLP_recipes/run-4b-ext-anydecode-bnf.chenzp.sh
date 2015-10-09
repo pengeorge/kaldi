@@ -19,7 +19,9 @@ run_kws_stt_bg=true
 # time-consuming lattice-to-ctm.
 # Available only when cmd is "queue.pl ..."
 
+bnf_input_data=data
 mlsuffix=6langFLPNN.raw_ft  #suffix for multilang, e.g. 6langFLPNN.raw_ft
+bnf_suffix=
 
 kind=
 data_only=false
@@ -203,10 +205,11 @@ fi
 if [ ! -f $datadir_ext/.done ]; then
   mkdir -p $datadir
   mkdir -p $datadir_ext
+  base_datadir=`readlink -f data/$dataset_id`
   pushd $datadir_ext
   for f in segments; do
     if [ ! -L ../$dataset_id/$f ]; then
-      ln -sf ../../data/$dataset_id/$f ../$dataset_id/$f
+      ln -sf $base_datadir/$f ../$dataset_id/$f
     fi
     if [ ! -L $f ]; then
       ln -sf ../$dataset_id/$f $f
@@ -424,7 +427,7 @@ if [ -f $exp_dir/sgmm7/.done ]; then
   done
 fi
 
-suffixes='.fast .fast_splice0'
+suffixes='.fast'
 for suffix in '' $suffixes; do
   if [ -f $exp_dir/tri7_nnet${suffix}/.done ]; then
   #    [[ ( ! $exp_dir/tri7_nnet/decode_${dirid}/.done -nt $datadir/.done)  || \

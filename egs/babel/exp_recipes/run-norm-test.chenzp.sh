@@ -126,7 +126,7 @@ if ! $fast_path && [ -f ${decode}/.done ]; then
 #    --cmd "$decode_cmd" --skip-kws $skip_kws --skip-stt $skip_stt \
 #    "${shadow_set_extra_opts[@]}" "${lmwt_plp_extra_opts[@]}" \
 #    ${dataset_dir} data/lang ${decode}
-  . czpScripts/renorm_script.sh
+  . czpScripts/clips/renorm_script.sh
 fi
 
 ####################################################################
@@ -139,7 +139,7 @@ if [ -f exp/sgmm5/.done ]; then
   lmwt_extra_opts=${lmwt_plp_extra_opts[@]}
   if [ -f $decode/.done ]; then
     if ! $fast_path ; then
-      . czpScripts/renorm_script.sh
+      . czpScripts/clips/renorm_script.sh
     fi
   fi
 
@@ -151,7 +151,7 @@ if [ -f exp/sgmm5/.done ]; then
     decode=exp/sgmm5_mmi_b0.1/decode_fmllr_${dataset_id}_it$iter
     lmwt_extra_opts=${lmwt_plp_extra_opts[@]}
     if [ -f ${decode}/.done ]; then
-      . czpScripts/renorm_script.sh
+      . czpScripts/clips/renorm_script.sh
     fi
   done
 fi
@@ -164,7 +164,7 @@ if [ -f exp/tri6_nnet/.done ]; then
   decode=exp/tri6_nnet/decode_${dataset_id}
   lmwt_extra_opts=${lmwt_dnn_extra_opts[@]}
   if [ -f $decode/.done ]; then
-    . czpScripts/renorm_script.sh
+    . czpScripts/clips/renorm_script.sh
   fi
 fi
 
@@ -178,7 +178,7 @@ if [ -f exp/tri6a_nnet/.done ]; then
   decode=exp/tri6a_nnet/decode_${dataset_id}
   lmwt_extra_opts=${lmwt_dnn_extra_opts[@]}
   if [ -f $decode/.done ]; then
-    . czpScripts/renorm_script.sh
+    . czpScripts/clips/renorm_script.sh
   fi
 fi
 
@@ -192,7 +192,7 @@ if [ -f exp/tri6b_nnet/.done ]; then
   decode=exp/tri6b_nnet/decode_${dataset_id}
   lmwt_extra_opts=${lmwt_dnn_extra_opts[@]}
   if [ -f $decode/.done ]; then
-    . czpScripts/renorm_script.sh
+    . czpScripts/clips/renorm_script.sh
   fi
 fi
 
@@ -207,7 +207,7 @@ for dnn in tri6_nnet_semi_supervised tri6_nnet_semi_supervised2 \
     decode=exp/$dnn/decode_${dataset_id}
     lmwt_extra_opts=${lmwt_dnn_extra_opts[@]}
     if [ -f $decode/.done ]; then
-      . czpScripts/renorm_script.sh
+      . czpScripts/clips/renorm_script.sh
     fi
   fi
 done
@@ -226,7 +226,7 @@ if [ -f exp/tri6_nnet_mpe/.done ]; then
     decode=exp/tri6_nnet_mpe/decode_${dataset_id}_epoch$epoch
     lmwt_extra_opts=${lmwt_dnn_extra_opts[@]}
     if [ -f $decode/.done ]; then
-      . czpScripts/renorm_script.sh
+      . czpScripts/clips/renorm_script.sh
     fi
   done
 fi

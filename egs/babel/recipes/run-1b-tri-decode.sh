@@ -31,7 +31,7 @@ if [ $# -ne 0 ]; then
   exit 1
 fi
 
-. ./czpScripts/prep_conf_and_data_for_decoding.sh
+. ./czpScripts/clips/prep_conf_and_data_for_decoding.sh
 
 ####################################################################
 ##
