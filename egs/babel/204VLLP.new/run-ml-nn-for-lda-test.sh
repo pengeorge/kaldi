@@ -1,1 +1,0 @@
-./run-2a-nnet-multilang-from-scratch.sh --mlsuffix scratch_4lang10hr_5hid.raw_ldaAll --langres '101LLP 104LLP 105LLP 106LLP' --num-jobs-nnet '2 2 2 2' --ml-mixup '5000 5000 5000 5000' --lda-type all --ali-for-egs exp/tri5_ali

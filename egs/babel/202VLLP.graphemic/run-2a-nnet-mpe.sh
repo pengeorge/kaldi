@@ -1,1 +1,0 @@
-../s5c/run-2a-nnet-mpe.sh

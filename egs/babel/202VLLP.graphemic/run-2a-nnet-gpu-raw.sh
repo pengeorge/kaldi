@@ -1,1 +1,0 @@
-../exp_recipes/run-2a-nnet-gpu-raw.sh

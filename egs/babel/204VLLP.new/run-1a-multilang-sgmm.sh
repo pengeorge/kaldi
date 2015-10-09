@@ -1,1 +1,0 @@
-../VLLP_recipes/run-1a-multilang-sgmm.sh

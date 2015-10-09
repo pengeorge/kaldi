@@ -1,1 +1,0 @@
-../204VLLP.v2/run-1b-tri-decode.sh
