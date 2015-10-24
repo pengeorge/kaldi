@@ -1,0 +1,1 @@
+/home/kaldi/code/kaldi-trunk/myscripts/recipes/in_local/kws_data_prep_proxy.chenzp.sh
