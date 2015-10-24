@@ -185,8 +185,8 @@ int main(int argc, char *argv[]) {
     // to do epsilon removal after composition with the keyword FST. They have
     // to traverse the resulting FST.
     int32 label_count = 1;
-    std::tr1::unordered_map<uint64, uint32> label_encoder;
-    std::tr1::unordered_map<uint32, uint64> label_decoder;
+    unordered_map<uint64, uint32> label_encoder;
+    unordered_map<uint32, uint64> label_decoder;
     for (StateIterator<KwsLexicographicFst> siter(index); !siter.Done(); siter.Next()) {
       StateId state_id = siter.Value();
       for (MutableArcIterator<KwsLexicographicFst> 
@@ -228,7 +228,7 @@ int main(int argc, char *argv[]) {
     servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
     servaddr.sin_port = htons(port);
 
-    if( bind(listenfd, (struct sockaddr*)&servaddr, sizeof(servaddr)) == -1){
+    if( ::bind(listenfd, (struct sockaddr*)&servaddr, sizeof(servaddr)) == -1){
       printf("bind socket error: %s(errno: %d)\n",strerror(errno),errno);
       exit(0);
     }
