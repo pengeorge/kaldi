@@ -66,6 +66,7 @@ int main(int argc, char **argv) {
       VectorFst<LogArc> *fst = new VectorFst<LogArc>;
       Cast(*fst_std, fst);
 
+      //TODO this seems to be a wrong rescale, should rescale final states only.
       RescaleToStochastic(fst, delta);
       //Weight tot = ShortestDistance(*fst),
       Weight tot2 = ComputeTotalWeight(*fst, Weight(-log(2.0)));

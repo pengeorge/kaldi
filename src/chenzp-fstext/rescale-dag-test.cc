@@ -17,7 +17,7 @@
 // See the Apache 2 License for the specific language governing permissions and
 // limitations under the License.
 
-#include "chenzp-fstext/rescale.h"
+#include "chenzp-fstext/rescale-dag.h"
 #include "fstext/fstext-utils.h"
 #include "fstext/fst-test-utils.h"
 // Just check that it compiles, for now.
@@ -40,19 +40,8 @@ template<class Arc> void TestComputeTotalWeight() {
     fstprinter.Print(&std::cout, "standard output");
   }
 
-  Weight max(-log(2.0));
-  Weight tot = ComputeTotalWeight(*fst, max);
+  Weight tot = ComputeDagTotalWeight(*fst);
   std::cout << "Total weight is: " << tot.Value() << '\n';
-
-
-  if (tot.Value() > max.Value()) {  // didn't max out...
-    Weight tot2 = ShortestDistance(*fst);
-    if (!ApproxEqual(tot, tot2, 0.05)) {
-      KALDI_ERR << tot << " differs from " << tot2;
-      assert(0);
-    }
-    std::cout << "our tot: " <<tot.Value() <<", shortest-distance tot: " << tot2.Value() << '\n';
-  }
 
   delete fst;
 }
@@ -76,11 +65,10 @@ void TestRescaleToStochastic() {
     fstprinter.Print(&std::cout, "standard output");
 
   }
-  float diff = 0.01;
-
-  RescaleToStochastic(fst, diff);
+  float diff = 0.001;
+  RescaleDagToStochastic(fst);
   Weight tot = ShortestDistance(*fst),
-      tot2 = ComputeTotalWeight(*fst, Weight(-log(2.0)));
+      tot2 = ComputeDagTotalWeight(*fst);
   std::cerr <<  " tot is " << tot<<", tot2 = "<<tot2<<'\n';
   assert(ApproxEqual(tot2, Weight::One(), diff));
 
