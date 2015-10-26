@@ -4,7 +4,7 @@ set -e
 set -o pipefail
 
 . path.sh
-lex=./data/lang_ext_music/words.txt
+lex=data/lang/words.txt  #./data/lang_ext_music/words.txt
 w2c=`dirname $lex`/w2c.int
 . ./utils/parse_options.sh
 

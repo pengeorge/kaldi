@@ -19,6 +19,7 @@
 
 #define _DEBUG
 
+#include <set>
 #include "base/kaldi-common.h"
 #include "util/common-utils.h"
 #include "fstext/fstext-lib.h"
@@ -26,30 +27,61 @@
 #include "lat/kaldi-lattice.h"
 #include "chenzp-fstext/rescale-dag.h"
 
+using namespace fst;
+
 #ifdef _DEBUG
 static void saveLattice(const kaldi::Lattice &lat, std::string key, std::string wspecifier) {
   kaldi::LatticeWriter writer(wspecifier);
   writer.Write(key, lat);
 }
 
-static void saveFST(const fst::VectorFst<fst::StdArc> &fst, std::string key, std::string wspecifier, bool opt = false) {
+static void saveFST(const VectorFst<StdArc> &fst, std::string key, std::string wspecifier, bool opt = false) {
   kaldi::TableWriter<fst::VectorFstHolder> writer(wspecifier);
   if (!opt) {
     writer.Write(key, fst);
     return;
   }
 
-  fst::VectorFst<fst::StdArc> tmp = fst, tmp2;
+  VectorFst<StdArc> tmp = fst, tmp2;
   RmEpsilon(&tmp);
   Determinize(tmp, &tmp2);
   writer.Write(key, tmp2);
 }
 #endif
 
+/**
+ * filter fst_src by allowing only symbols in the given FST to be outputed.
+ */
+template<class Arc>
+void filterFST(const VectorFst<Arc> &fst_src,
+               const VectorFst<Arc> &fst_syms,
+               VectorFst<Arc> *pfst_des) {
+  typedef typename Arc::Label Label;
+  typedef typename Arc::StateId StateId;
+  typedef typename Arc::Weight Weight;
+  std::set<Label> sym_set;
+  sym_set.clear();
+  for (StateIterator<Fst<Arc> > siter(fst_syms); !siter.Done(); siter.Next()) {
+    const StateId &s = siter.Value();
+    for (ArcIterator<Fst<Arc> > aiter(fst_syms, s); !aiter.Done(); aiter.Next()) {
+      const Arc &arc = aiter.Value();
+      sym_set.insert(arc.olabel);
+    }
+  }
+  typename std::set<Label>::iterator si;
+  VectorFst<Arc> fst_filter;
+  StateId s = fst_filter.AddState();
+  fst_filter.SetStart(s);
+  for (si = sym_set.begin(); si != sym_set.end(); si++) {
+    fst_filter.AddArc(s, Arc(*si, *si, Weight::One(), s));
+  }
+  fst_filter.SetFinal(s, Weight::One());
+  Compose(fst_src, fst_filter, pfst_des); // fst_src should have been olabel-sorted
+}
+
 int main(int argc, char *argv[]) {
   try {
     using namespace kaldi;
-    using namespace fst;
     typedef kaldi::int32 int32;
     typedef kaldi::int64 int64;
     using fst::SymbolTable;
@@ -96,6 +128,7 @@ int main(int argc, char *argv[]) {
     CompactLatticeWriter tuned_lattice_writer(lats_wspecifier); 
 
     // Generate L' and compose L'xE
+    /*
     KALDI_LOG << "Generate L' and compose L'xE";
     VectorFst<StdArc> LixE;
     {
@@ -109,6 +142,9 @@ int main(int argc, char *argv[]) {
 #ifdef _DEBUG
     saveFST(LixE, "key", "ark:LixE.fsts", false);
 #endif
+    */
+    ArcSort(pL, OLabelCompare<StdArc>());
+    ArcSort(pE, ILabelCompare<StdArc>());
 
 
     int32 n_done = 0, n_fail = 0;
@@ -157,9 +193,30 @@ int main(int argc, char *argv[]) {
         // the normal (tropical) costs.
         Project(&fst_am, PROJECT_OUTPUT);
         RemoveEpsLocal(&fst_am);
+        ArcSort(&fst_am, ILabelCompare<StdArc>());
       }
 #ifdef _DEBUG
       saveFST(fst_am, key, "ark:fst_am.fsts");
+#endif
+
+      // retain only words appearing in the lattice for efficiency
+      KALDI_LOG << "Filtering L";
+      VectorFst<StdArc> L;
+      filterFST(*pL, fst_0, &L);
+#ifdef _DEBUG
+      saveFST(L, key, "ark:filtered_L.fsts");
+#endif
+
+      KALDI_LOG << "Generate Li x E";
+      VectorFst<StdArc> LixE;
+      {
+        VectorFst<StdArc> Li = L;
+        Invert(&Li);
+        Compose(Li, *pE, &LixE); // *pE was ilabel-sorted
+        RmEpsilon(&LixE);
+      }
+#ifdef _DEBUG
+      saveFST(LixE, key, "ark:filtered_LixE.fsts");
 #endif
 
       VectorFst<StdArc> s2s; // sequence to sequence FST with confusion weights
@@ -167,25 +224,27 @@ int main(int argc, char *argv[]) {
         // 2. Generate L x Lat_0
         KALDI_LOG << "Generate L x Lat_0";
         VectorFst<StdArc> LxLat0;
-        ArcSort(pL, OLabelCompare<StdArc>());
-        Compose(*pL, fst_0, &LxLat0);
+        ArcSort(&L, OLabelCompare<StdArc>());
+        Compose(L, fst_0, &LxLat0);
         RmEpsilon(&LxLat0);
 #ifdef _DEBUG
         saveFST(LxLat0, key, "ark:LxLat0.fsts");
 #endif
 
         // 3. Generate (Lat_0 x (Li x E)) x (L x Lat_0)
-        KALDI_LOG << "Generate (Lat_0 x (Li x E)) x (L x Lat_0)";
         {
+          KALDI_LOG << "Generate Lat_0 x (Li x E)";
           VectorFst<StdArc> tmp;
           ArcSort(&fst_0, OLabelCompare<StdArc>());
           Compose(fst_0, LixE, &tmp);
 #ifdef _DEBUG
           saveFST(tmp, "key", "ark:Lat0xLixE.fsts");
 #endif
+          KALDI_LOG << "Generate (Lat_0 x (Li x E)) x (L x Lat_0)";
           ArcSort(&tmp, OLabelCompare<StdArc>());
           Compose(tmp, LxLat0, &s2s);
           RmEpsilon(&s2s);
+          ArcSort(&s2s, ILabelCompare<StdArc>());
 #ifdef _DEBUG
           saveFST(s2s, "key", "ark:Lat0xLixExLxLat0.fsts");
 #endif
@@ -252,8 +311,7 @@ int main(int argc, char *argv[]) {
 #endif
 
             VectorFst<StdArc> fst_confusion_given_H;
-            ArcSort(&H, OLabelCompare<StdArc>());
-            Compose(H, s2s, &fst_confusion_given_H);
+            Compose(H, s2s, &fst_confusion_given_H); // s2s was ilabel-sorted
 #ifdef _DEBUG
             {
               std::ostringstream os;
@@ -276,8 +334,7 @@ int main(int argc, char *argv[]) {
 #endif
 
             VectorFst<StdArc> fst_tuned_for_H;
-            ArcSort(&fst_confusion_given_H, OLabelCompare<StdArc>());
-            Compose(fst_confusion_given_H, fst_am, &fst_tuned_for_H);
+            Compose(fst_confusion_given_H, fst_am, &fst_tuned_for_H); // fst_am was ilabel-sorted
 #ifdef _DEBUG
             {
               std::ostringstream os;
@@ -311,8 +368,6 @@ int main(int argc, char *argv[]) {
           KALDI_ASSERT(H_tuned.NumArcs(s) == 1);
           ArcIterator<Lattice > aiter(H_tuned, s);
           LatticeArc first_arc = aiter.Value();
-          KALDI_LOG << "VALUE1 of 1st arc is " << first_arc.weight.Value1();
-          KALDI_LOG << "VALUE2 of 1st arc is " << first_arc.weight.Value2();
           first_arc.weight.SetValue2(acoustic_weight.Value());
           H_tuned.DeleteArcs(s);
           H_tuned.AddArc(s, first_arc);
@@ -356,6 +411,7 @@ int main(int argc, char *argv[]) {
       }
     }
     delete pL;
+    delete pE;
 
     KALDI_LOG << "Done " << n_done << " lattices, failed for " << n_fail;
     return (n_done != 0 ? 0 : 1);
