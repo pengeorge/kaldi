@@ -17,7 +17,7 @@
 // See the Apache 2 License for the specific language governing permissions and
 // limitations under the License.
 
-#define _DEBUG
+//#define _DEBUG
 
 #include <set>
 #include "base/kaldi-common.h"
@@ -26,6 +26,7 @@
 #include "fstext/kaldi-fst-io.h"
 #include "lat/kaldi-lattice.h"
 #include "chenzp-fstext/rescale-dag.h"
+#include "fstext/prune-special.h"
 
 using namespace fst;
 
@@ -100,6 +101,15 @@ int main(int argc, char *argv[]) {
     BaseFloat acoustic_scale = 0.1;
     BaseFloat lm_scale = 1.0;
     int32 n = 50;
+    int32 confused_path_nbest = 100;
+    double confused_path_beam = 5;
+    int32 max_states = 100000;
+    po.Register("confused-path-nbest", &confused_path_nbest, "Prune (Lat0xL'xE)x(LxLat0) transducer to "
+                "only contain top n paths, -1 means all paths.");
+    po.Register("confused-path-beam", &confused_path_beam, "Prune (Lat0xL'xE)x(LxLat0) transducer to the "
+                "given beam, -1 means no prune.");
+    po.Register("max-states", &max_states, "Prune (Lat0xL'xE)x(LxLat0) transducer to the "
+                "given number of states, 0 means no prune.");
     
     po.Register("acoustic-scale", &acoustic_scale, "Scaling factor for acoustic likelihoods; used in lattice pruning"); 
     po.Register("lm-scale", &lm_scale, "Scaling factor for language model costs; used in lattice pruning");
@@ -196,15 +206,16 @@ int main(int argc, char *argv[]) {
         ArcSort(&fst_am, ILabelCompare<StdArc>());
       }
 #ifdef _DEBUG
-      saveFST(fst_am, key, "ark:fst_am.fsts");
+      saveFST(fst_am, "key", "ark:fst_am.fsts");
 #endif
 
       // retain only words appearing in the lattice for efficiency
       KALDI_LOG << "Filtering L";
       VectorFst<StdArc> L;
       filterFST(*pL, fst_0, &L);
+      RmEpsilon(&L);
 #ifdef _DEBUG
-      saveFST(L, key, "ark:filtered_L.fsts");
+      saveFST(L, "key", "ark:filtered_L.fsts");
 #endif
 
       KALDI_LOG << "Generate Li x E";
@@ -216,7 +227,7 @@ int main(int argc, char *argv[]) {
         RmEpsilon(&LixE);
       }
 #ifdef _DEBUG
-      saveFST(LixE, key, "ark:filtered_LixE.fsts");
+      saveFST(LixE, "key", "ark:filtered_LixE.fsts");
 #endif
 
       VectorFst<StdArc> s2s; // sequence to sequence FST with confusion weights
@@ -228,7 +239,7 @@ int main(int argc, char *argv[]) {
         Compose(L, fst_0, &LxLat0);
         RmEpsilon(&LxLat0);
 #ifdef _DEBUG
-        saveFST(LxLat0, key, "ark:LxLat0.fsts");
+        saveFST(LxLat0, "key", "ark:LxLat0.fsts");
 #endif
 
         // 3. Generate (Lat_0 x (Li x E)) x (L x Lat_0)
@@ -238,12 +249,53 @@ int main(int argc, char *argv[]) {
           ArcSort(&fst_0, OLabelCompare<StdArc>());
           Compose(fst_0, LixE, &tmp);
 #ifdef _DEBUG
-          saveFST(tmp, "key", "ark:Lat0xLixE.fsts");
+          //saveFST(tmp, "key", "ark:Lat0xLixE.fsts");
 #endif
-          KALDI_LOG << "Generate (Lat_0 x (Li x E)) x (L x Lat_0)";
+          KALDI_LOG << "Generate Lat_0 x (Li x E) x L";
           ArcSort(&tmp, OLabelCompare<StdArc>());
-          Compose(tmp, LxLat0, &s2s);
-          RmEpsilon(&s2s);
+          ArcSort(&L, ILabelCompare<StdArc>());
+          if (confused_path_beam >= 0) {
+            // We only use the delayed FST when pruning is requested, because we do
+            // the optimization in pruning.
+            // Composing KxL2xE and L1'. We assume L1' is ilabel sorted.
+            ComposeFst<StdArc> lazy_compose(tmp, L);
+            tmp.DeleteStates();
+
+            //ProjectFst<StdArc> lazy_project(lazy_compose, PROJECT_OUTPUT);
+
+            // This will likely be the most time consuming part, we use a special
+            // pruning algorithm where we don't expand the full FST.
+            KALDI_VLOG(1) << "Prune(Lat0xL'xE)xL, beam=" << confused_path_beam;
+            PruneSpecial(lazy_compose, &s2s, confused_path_beam, max_states);
+          } else {
+            // If no pruning is requested, we do the normal composition.
+            Compose(tmp, L, &s2s);
+            RmEpsilon(&s2s);
+          }
+          KALDI_LOG << "Generate (Lat_0 x (Li x E) x L) x Lat_0";
+          Compose(s2s, fst_0, &tmp);
+          RmEpsilon(&tmp);
+          s2s = tmp;
+          /*
+          ArcSort(&LxLat0, ILabelCompare<StdArc>());
+          if (confused_path_beam >= 0) {
+            // We only use the delayed FST when pruning is requested, because we do
+            // the optimization in pruning.
+            // Composing KxL2xE and L1'. We assume L1' is ilabel sorted.
+            ComposeFst<StdArc> lazy_compose(tmp, LxLat0);
+            tmp.DeleteStates();
+
+            //ProjectFst<StdArc> lazy_project(lazy_compose, PROJECT_OUTPUT);
+
+            // This will likely be the most time consuming part, we use a special
+            // pruning algorithm where we don't expand the full FST.
+            KALDI_VLOG(1) << "Prune(Lat0xL'xE)x(LxLat0), beam=" << confused_path_beam;
+            PruneSpecial(lazy_compose, &s2s, confused_path_beam, max_states);
+          } else {
+            // If no pruning is requested, we do the normal composition.
+            Compose(tmp, LxLat0, &s2s);
+            RmEpsilon(&s2s);
+          }*/
           ArcSort(&s2s, ILabelCompare<StdArc>());
 #ifdef _DEBUG
           saveFST(s2s, "key", "ark:Lat0xLixExLxLat0.fsts");
@@ -359,7 +411,7 @@ int main(int argc, char *argv[]) {
               VectorFst<LogArc> fst_log;
               Cast(fst_tuned_for_H, &fst_log);
               acoustic_weight = ComputeDagTotalWeight(fst_log);
-              KALDI_LOG << "Total weight of path " << k << " is " << acoustic_weight.Value();
+              //KALDI_LOG << "Total weight of path " << k << " is " << acoustic_weight.Value();
             }
           }
           

@@ -10,7 +10,12 @@ set -u
 
 # Begin configuration section.
 nj=30
+acwt=15  # used in lattice-amrescore for picking shortest paths
+n=1000     # maximum number of paths to retain
 count_cutoff=1
+
+skip_scoring=false
+scoring_opts=
 # End configuration section.
 
 echo "$0 $@"  # Print the command line for logging
@@ -19,15 +24,16 @@ echo "$0 $@"  # Print the command line for logging
 [ -f ./path.sh ] && . ./path.sh; # source the path.
 . parse_options.sh || exit 1;
 
-if [ $# != 4 ]; then
-    echo "Usage: $0 <lang-dir> <graph-dir> <dev-data-dir> <test-data-decode-dir>"
-    echo "e.g. $0 exp/tri4b/graph data/dev decode_eval2000"
+if [ $# != 5 ]; then
+    echo "Usage: $0 <lang-dir> <graph-dir> <dev-data-dir> <test-data-dir> <test-data-decode-dir>"
+    echo "e.g. $0 data/lang exp/tri4b/graph data/dev data/test exp/tri4b/decode_test"
     exit 1;
 fi
 
 langdir=$1; shift
 graphdir=$1; shift
 devdatadir=$1; shift
+testdatadir=$1; shift
 decodedir=$1; shift
 
 modeldir=$(dirname $decodedir)
@@ -146,7 +152,21 @@ if [ ! -f $cmdir/.done ]; then
 fi
 
 # AM rescore
+outdir=${decodedir}_amrescore_${acwt}_${n}_${dev}_${count_cutoff}
+if [ ! -f $outdir/.done ]; then
+  eval_nj=`cat $decodedir/num_jobs`
+  $decode_cmd JOB=1:$eval_nj $outdir/log/amrescore.JOB.log \
+    lattice-amrescore --acoustic-scale=$acwt --n=$n "ark:gzip -cdf $decodedir/lat.JOB.gz |" \
+    $cmdir/E.fst $L_dir/L.fst "ark:|gzip -c > $outdir/lat.JOB.gz" || exit 1
+  touch $outdir/.done
+fi
 
 # Score WER
+if [ ! -f $outdir/.done.score ]; then
+  [ ! -x local/score.sh ] && \
+    echo "$0: not scoring because local/score.sh does not exist or not executable." && exit 1;
+  local/score.sh $scoring_opts --cmd "$decode_cmd" $testdatadir $graphdir $outdir
+  touch $outdir/.done.score
+fi
 
 
