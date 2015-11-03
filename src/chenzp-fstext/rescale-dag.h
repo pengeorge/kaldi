@@ -29,6 +29,9 @@
 
 namespace fst {
 
+/// isDag checks if an FST is a directed acylic graph
+template<class Arc>
+bool IsDAG(ExpandedFst<Arc> &fst);
 
 /// ComputeTotalWeight computes the total weight of the FST,
 /// i.e. the sum of all paths.  It will only work for arcs of StdArc/LogArc type

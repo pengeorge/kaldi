@@ -12,6 +12,7 @@ set -u
 nj=30
 acwt=15  # used in lattice-amrescore for picking shortest paths
 n=1000     # maximum number of paths to retain
+beam=5
 count_cutoff=1
 
 skip_scoring=false
@@ -152,11 +153,11 @@ if [ ! -f $cmdir/.done ]; then
 fi
 
 # AM rescore
-outdir=${decodedir}_amrescore_${acwt}_${n}_${dev}_${count_cutoff}
+outdir=${decodedir}_amrescore_${acwt}_${n}_${dev}_${count_cutoff}_beam${beam}
 if [ ! -f $outdir/.done ]; then
   eval_nj=`cat $decodedir/num_jobs`
   $decode_cmd JOB=1:$eval_nj $outdir/log/amrescore.JOB.log \
-    lattice-amrescore --acoustic-scale=$acwt --n=$n "ark:gzip -cdf $decodedir/lat.JOB.gz |" \
+    lattice-amrescore --acoustic-scale=$acwt --n=$n --confused-path-beam=$beam "ark:gzip -cdf $decodedir/lat.JOB.gz |" \
     $cmdir/E.fst $L_dir/L.fst "ark:|gzip -c > $outdir/lat.JOB.gz" || exit 1
   touch $outdir/.done
 fi

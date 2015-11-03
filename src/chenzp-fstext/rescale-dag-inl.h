@@ -29,6 +29,60 @@ namespace fst {
 
 // Only support DAG with a single initial state.
 template<class Arc>
+bool IsDAG(ExpandedFst<Arc> &fst) {
+  typedef typename Arc::StateId StateId;
+  typedef typename Arc::Weight Weight;
+  if (fst.Start() == kNoStateId) return true;
+  StateId num_states = fst.NumStates();
+
+  // Should probably use Weight instead of float here, but would
+  // involve some painful comparators.
+  vector<int32> cur_num_in_arcs(num_states, 0);
+  vector<bool> queued(num_states, false);
+
+  // Calculate the incoming degree for each state
+  for (StateIterator<Fst<Arc> > siter(fst); !siter.Done(); siter.Next()) {
+    const StateId &s = siter.Value();
+    for (ArcIterator<Fst<Arc> > aiter(fst, s); !aiter.Done(); aiter.Next()) {
+      const Arc &arc = aiter.Value();
+      cur_num_in_arcs[arc.nextstate]++;
+    }
+  }
+
+  std::queue<StateId> q;  // FIFO queue.
+
+  {
+    StateId is = fst.Start();
+    if (cur_num_in_arcs[is] != 0)
+      return false;
+    q.push(is);
+    queued[is] = true;
+  }
+
+  while (!q.empty()) {
+    StateId s = q.front();
+    q.pop();
+
+    for (ArcIterator<Fst<Arc> > aiter(fst, s); !aiter.Done(); aiter.Next()) {
+      const Arc &arc = aiter.Value();
+      cur_num_in_arcs[arc.nextstate]--;
+      if (cur_num_in_arcs[arc.nextstate] == 0 && !queued[arc.nextstate]) {
+        q.push(arc.nextstate);
+        queued[arc.nextstate] = true;
+      }
+    }
+  }
+  for (StateIterator<Fst<Arc> > siter(fst); !siter.Done(); siter.Next()) {
+    const StateId &s = siter.Value();
+    if (!queued[s]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Only support DAG with a single initial state.
+template<class Arc>
 inline typename Arc::Weight
 ComputeDagTotalWeight(ExpandedFst<Arc> &fst) {
   typedef typename Arc::StateId StateId;
@@ -74,23 +128,24 @@ ComputeDagTotalWeight(ExpandedFst<Arc> &fst) {
     Weight final = fst.Final(s);
     if (final != Weight::Zero()) {
       total_final = Plus(total_final, Times(w, final));
-    } else {
-      KALDI_ASSERT(fst.NumArcs(s) > 0);
-      for (ArcIterator<Fst<Arc> > aiter(fst, s); !aiter.Done(); aiter.Next()) {
-        const Arc &arc = aiter.Value();
-        Weight next_weight = Times(w, arc.weight);
-        cur_tot[arc.nextstate] = Plus(Weight(cur_tot[arc.nextstate]), next_weight).Value();
-        cur_num_in_arcs[arc.nextstate]--;
-        if (cur_num_in_arcs[arc.nextstate] == 0 && !queued[arc.nextstate]) {
-          q.push(arc.nextstate);
-          queued[arc.nextstate] = true;
-        }
+    }
+    for (ArcIterator<Fst<Arc> > aiter(fst, s); !aiter.Done(); aiter.Next()) {
+      const Arc &arc = aiter.Value();
+      Weight next_weight = Times(w, arc.weight);
+      cur_tot[arc.nextstate] = Plus(Weight(cur_tot[arc.nextstate]), next_weight).Value();
+      cur_num_in_arcs[arc.nextstate]--;
+      if (cur_num_in_arcs[arc.nextstate] == 0 && !queued[arc.nextstate]) {
+        q.push(arc.nextstate);
+        queued[arc.nextstate] = true;
       }
     }
   }
   for (StateIterator<Fst<Arc> > siter(fst); !siter.Done(); siter.Next()) {
     const StateId &s = siter.Value();
-    if (!queued[s]) KALDI_ERR << "ComputeDagTotalWeight failed: not a DAG";
+    if (!queued[s]) {
+      KALDI_ERR << "[WARNING] ComputeDagTotalWeight failed: not a DAG";
+      break;
+    }
   }
   return total_final;
 }

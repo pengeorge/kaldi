@@ -18,6 +18,7 @@
 // limitations under the License.
 
 //#define _DEBUG
+//#define _STATS
 
 #include <set>
 #include "base/kaldi-common.h"
@@ -100,12 +101,12 @@ int main(int argc, char *argv[]) {
     ParseOptions po(usage);
     BaseFloat acoustic_scale = 0.1;
     BaseFloat lm_scale = 1.0;
-    int32 n = 50;
-    int32 confused_path_nbest = 100;
+    int32 n = 1000;
+    //int32 confused_path_nbest = 100;
     double confused_path_beam = 5;
     int32 max_states = 100000;
-    po.Register("confused-path-nbest", &confused_path_nbest, "Prune (Lat0xL'xE)x(LxLat0) transducer to "
-                "only contain top n paths, -1 means all paths.");
+    //po.Register("confused-path-nbest", &confused_path_nbest, "Prune (Lat0xL'xE)x(LxLat0) transducer to "
+    //            "only contain top n paths, -1 means all paths.");
     po.Register("confused-path-beam", &confused_path_beam, "Prune (Lat0xL'xE)x(LxLat0) transducer to the "
                 "given beam, -1 means no prune.");
     po.Register("max-states", &max_states, "Prune (Lat0xL'xE)x(LxLat0) transducer to the "
@@ -137,22 +138,6 @@ int main(int argc, char *argv[]) {
     // Write as compact lattice.
     CompactLatticeWriter tuned_lattice_writer(lats_wspecifier); 
 
-    // Generate L' and compose L'xE
-    /*
-    KALDI_LOG << "Generate L' and compose L'xE";
-    VectorFst<StdArc> LixE;
-    {
-      VectorFst<StdArc> Li = *pL;
-      Invert(&Li);
-      ArcSort(&Li, OLabelCompare<StdArc>());
-      Compose(Li, *pE, &LixE);
-      RmEpsilon(&LixE);
-    }
-    delete pE;
-#ifdef _DEBUG
-    saveFST(LixE, "key", "ark:LixE.fsts", false);
-#endif
-    */
     ArcSort(pL, OLabelCompare<StdArc>());
     ArcSort(pE, ILabelCompare<StdArc>());
 
@@ -169,6 +154,9 @@ int main(int argc, char *argv[]) {
     // Scale for FST converting (am to zero)
     vector<vector<double> > scale_lm_only = fst::LatticeScale(1.0, 0.0);
 
+#ifdef _STATS
+    double retainRate = 0.0;
+#endif
     // Iterate the lattice of each utterance
     for (; !lattice_reader.Done(); lattice_reader.Next()) {
       std::string key = lattice_reader.Key();
@@ -203,6 +191,9 @@ int main(int argc, char *argv[]) {
         // the normal (tropical) costs.
         Project(&fst_am, PROJECT_OUTPUT);
         RemoveEpsLocal(&fst_am);
+        VectorFst<StdArc> tmp = fst_am;
+        Determinize(tmp, &fst_am);
+        Minimize(&fst_am);
         ArcSort(&fst_am, ILabelCompare<StdArc>());
       }
 #ifdef _DEBUG
@@ -303,6 +294,19 @@ int main(int argc, char *argv[]) {
           //Determinize(tmp, &tmp2);
         }
       }
+#ifdef _STATS
+      VectorFst<StdArc> s2s_for_stats;
+      {
+        VectorFst<StdArc> tmp = s2s;
+        Project(&tmp, PROJECT_OUTPUT);
+        //Determinize(tmp, &s2s_for_stats); // this consumes too much memory for some lattices
+        s2s_for_stats = tmp;
+        RmEpsilon(&s2s_for_stats);
+      }
+
+      int32 retainNum = 0;
+#endif
+
 
       // 4. Iterate top n paths and get weights for each H 
       KALDI_LOG << "Iterate top n paths and get weights for each H";
@@ -350,8 +354,7 @@ int main(int argc, char *argv[]) {
           LogArc::Weight acoustic_weight;
           {
             VectorFst<StdArc> H;
-            ConvertLattice(nbest_lats[k], &H); // this adds up the (lm,acoustic) costs to get
-            // the normal (tropical) costs.
+            ConvertLattice(nbest_lats[k], &H);
             Project(&H, fst::PROJECT_OUTPUT);
             RmEpsilon(&H);
 #ifdef _DEBUG
@@ -362,8 +365,34 @@ int main(int argc, char *argv[]) {
             }
 #endif
 
+#ifdef _STATS
+            {
+              // Check whether s2s contains this H
+              VectorFst<StdArc> tmp;
+              Compose(H, s2s_for_stats, &tmp);
+              RmEpsilon(&tmp);
+              if (!(tmp.NumStates() == 0 || (tmp.NumStates() == 1 && tmp.NumArcs(tmp.Start()) == 0)) ) {
+                retainNum++;
+              }
+            }
+#endif
+
             VectorFst<StdArc> fst_confusion_given_H;
-            Compose(H, s2s, &fst_confusion_given_H); // s2s was ilabel-sorted
+            {
+              VectorFst<StdArc> tmp;
+              VectorFst<LogArc> fst_log, tmp_log;
+              Compose(H, s2s, &tmp); // s2s was ilabel-sorted
+              Project(&tmp, PROJECT_OUTPUT);
+              RmEpsilon(&tmp);
+              Cast(tmp, &fst_log);
+              Determinize(fst_log, &tmp_log);
+              RmEpsilon(&tmp_log);
+              //Push(&fst_confusion_given_H, REWEIGHT_TO_INITIAL);
+              Determinize(fst_log, &tmp_log);
+              Minimize(&tmp_log);
+              RmEpsilon(&tmp_log);
+              Cast(tmp_log, &fst_confusion_given_H);
+            }
 #ifdef _DEBUG
             {
               std::ostringstream os;
@@ -438,6 +467,14 @@ int main(int argc, char *argv[]) {
         saveLattice(lat_union, "union_H", "ark:union_H.fsts");
 #endif
 
+#ifdef _STATS
+        {
+          double this_retainRate = 1.0 * retainNum / nbest_lats.size();
+          retainRate += this_retainRate;
+          KALDI_LOG << "Retained rate: " << this_retainRate * 100 << " %";
+        }
+#endif
+
         KALDI_LOG << "Optimize: det and min";
         {
           Lattice tmp;
@@ -465,6 +502,7 @@ int main(int argc, char *argv[]) {
     delete pL;
     delete pE;
 
+    KALDI_LOG << "Average retained rate: " << 100.0 * retainRate / n_done << " %";
     KALDI_LOG << "Done " << n_done << " lattices, failed for " << n_fail;
     return (n_done != 0 ? 0 : 1);
   } catch(const std::exception &e) {
