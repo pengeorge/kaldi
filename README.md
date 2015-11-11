@@ -1,5 +1,8 @@
-[![Build Status](https://travis-ci.org/kaldi-asr/kaldi.svg?branch=master)]
-(https://travis-ci.org/kaldi-asr/kaldi)
+Branch master: [![Build Status](https://travis-ci.org/pengeorge/kaldi.svg?branch=master)]
+(https://travis-ci.org/pengeorge/kaldi)
+
+Branch zpchen: [![Build Status](https://travis-ci.org/pengeorge/kaldi.svg?branch=zpchen)]
+(https://travis-ci.org/pengeorge/kaldi)
 
 Kaldi Speech Recognition Toolkit
 ================================

@@ -31,14 +31,14 @@ namespace fst {
 
 /// isDag checks if an FST is a directed acylic graph
 template<class Arc>
-bool IsDAG(ExpandedFst<Arc> &fst);
+bool IsDAG(const ExpandedFst<Arc> &fst);
 
 /// ComputeTotalWeight computes the total weight of the FST,
 /// i.e. the sum of all paths.  It will only work for arcs of StdArc/LogArc type
 
 template<class Arc>
 inline typename Arc::Weight
-ComputeDagTotalWeight(ExpandedFst<Arc> &fst);
+ComputeDagTotalWeight(const ExpandedFst<Arc> &fst);
 
 
 /// Rescale multiplies (in the semiring) all weights and final probabilities in

@@ -29,7 +29,7 @@ namespace fst {
 
 // Only support DAG with a single initial state.
 template<class Arc>
-bool IsDAG(ExpandedFst<Arc> &fst) {
+bool IsDAG(const ExpandedFst<Arc> &fst) {
   typedef typename Arc::StateId StateId;
   typedef typename Arc::Weight Weight;
   if (fst.Start() == kNoStateId) return true;
@@ -84,7 +84,7 @@ bool IsDAG(ExpandedFst<Arc> &fst) {
 // Only support DAG with a single initial state.
 template<class Arc>
 inline typename Arc::Weight
-ComputeDagTotalWeight(ExpandedFst<Arc> &fst) {
+ComputeDagTotalWeight(const ExpandedFst<Arc> &fst) {
   typedef typename Arc::StateId StateId;
   typedef typename Arc::Weight Weight;
   if (fst.Start() == kNoStateId) return Weight::Zero();
