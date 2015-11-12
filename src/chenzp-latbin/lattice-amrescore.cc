@@ -19,6 +19,7 @@
 
 //#define _DEBUG
 //#define _STATS
+//#define _INPUT_S2S
 
 #include <set>
 #include "base/kaldi-common.h"
@@ -95,8 +96,8 @@ int main(int argc, char *argv[]) {
         "Add lm_scale * [cost of best path through LM FST] to graph-cost of\n"
         "paths through lattice.  Does this by composing with LM FST, then\n"
         "lattice-determinizing (it has to negate weights first if lm_scale<0)\n"
-        "Usage: lattice-amrescore [options] lattice-rspecifier E.fst L.fst lattice-wspecifier\n"
-        " e.g.: lattice-amrescore ark:in.lats ark:out.lats\n";
+        "Usage: lattice-amrescore [options] <lattice-rspecifier> <E.fst> <L.fst> <lattice-wspecifier|s2s-FSTs-wspecifier>\n"
+        " e.g.: lattice-amrescore ark:in.lats E.fst L.fst ark:out.lats\n";
       
     ParseOptions po(usage);
     BaseFloat acoustic_scale = 0.1;
@@ -105,6 +106,11 @@ int main(int argc, char *argv[]) {
     //int32 confused_path_nbest = 100;
     double confused_path_beam = 5;
     int32 max_states = 100000;
+    std::string s2s_rxfilename;
+    bool s2s_only = false;
+#ifdef _INPUT_S2S
+    std::string s2s_filename;
+#endif
     //po.Register("confused-path-nbest", &confused_path_nbest, "Prune (Lat0xL'xE)x(LxLat0) transducer to "
     //            "only contain top n paths, -1 means all paths.");
     po.Register("confused-path-beam", &confused_path_beam, "Prune (Lat0xL'xE)x(LxLat0) transducer to the "
@@ -115,6 +121,11 @@ int main(int argc, char *argv[]) {
     po.Register("acoustic-scale", &acoustic_scale, "Scaling factor for acoustic likelihoods; used in lattice pruning"); 
     po.Register("lm-scale", &lm_scale, "Scaling factor for language model costs; used in lattice pruning");
     po.Register("n", &n, "Maximum number of paths for score tuning");
+    po.Register("s2s-rxfilename", &s2s_rxfilename, "sequence to sequence confusion FSTs filename, with the same key as lattice-rspecifier");
+    po.Register("s2s-only", &s2s_only, "generate sequence to sequence confusion FSTs only. This should be false if s2s_rxfilename is specified");
+#ifdef _INPUT_S2S
+    po.Register("s2s-filename", &s2s_filename, "sequence to sequence FST filename, only for debug");
+#endif
     po.Read(argc, argv);
 
     if (po.NumArgs() != 4) {
@@ -127,25 +138,46 @@ int main(int argc, char *argv[]) {
         L_filename = po.GetArg(3),
         lats_wspecifier = po.GetArg(4);
 
+    if (!s2s_rxfilename.empty() && s2s_only) {
+      po.PrintUsage();
+      exit(1);
+    }
     // Read as compact lattice
     // Use regular lattice when we need it in for efficient
     // composition and determinization.
     SequentialCompactLatticeReader lattice_reader(lats_rspecifier);
-    
-    VectorFst<StdArc> *pE = ReadFstKaldi(E_filename);
-    VectorFst<StdArc> *pL = ReadFstKaldi(L_filename);
-
+    RandomAccessTableReader<VectorFstHolder> s2s_reader(s2s_rxfilename);
     // Write as compact lattice.
-    CompactLatticeWriter tuned_lattice_writer(lats_wspecifier); 
-
-    ArcSort(pL, OLabelCompare<StdArc>());
-    ArcSort(pE, ILabelCompare<StdArc>());
+    CompactLatticeWriter lattice_writer;
+    TableWriter<VectorFstHolder> s2s_writer;
+    if (!s2s_only) {
+      lattice_writer.Open(lats_wspecifier);
+    } else {
+      s2s_writer.Open(lats_wspecifier);
+    }
+    
+    VectorFst<StdArc> *pE, *pL;
+    if (s2s_rxfilename.empty()) {
+      pE = ReadFstKaldi(E_filename);
+      pL = ReadFstKaldi(L_filename);
+      ArcSort(pL, OLabelCompare<StdArc>());
+      ArcSort(pE, ILabelCompare<StdArc>());
+    }
+#ifdef _INPUT_S2S
+    VectorFst<StdArc> *ps2s;
+    if (!s2s_filename.empty()) {
+      ps2s = ReadFstKaldi(s2s_filename);
+    } else {
+      KALDI_ERR << "s2s filename is empty";
+    }
+#endif
 
 
     int32 n_done = 0, n_fail = 0;
     
     // LM and AM scales for ShortestPath
     vector<vector<double> > scale_shortestpath = fst::LatticeScale(lm_scale, acoustic_scale);
+    vector<vector<double> > scale_shortestpath_reverse = fst::LatticeScale(1/lm_scale, 1/acoustic_scale);
     // Scale for FST converting (to zero)
     vector<vector<double> > scale_0 = fst::LatticeScale(0.0, 0.0);
     // Scale for FST converting (lm to zero)
@@ -156,6 +188,7 @@ int main(int argc, char *argv[]) {
 
 #ifdef _STATS
     double retainRate = 0.0;
+    double selfConfRate = 0.0;
 #endif
     // Iterate the lattice of each utterance
     for (; !lattice_reader.Done(); lattice_reader.Next()) {
@@ -171,7 +204,7 @@ int main(int argc, char *argv[]) {
 
         ConvertLattice(clat, &lat); // convert to non-compact form.. won't introduce
         // extra states because already removed alignments.
-      }
+      } // got lat
       
       // 1. Convert to FSTs with StdArc
       KALDI_LOG << "Convert to FSTs with StdArc";
@@ -184,13 +217,13 @@ int main(int argc, char *argv[]) {
         ConvertLattice(lat_0, &fst_0); // this adds up the (lm,acoustic) costs to get
         // the normal (tropical) costs.
         Project(&fst_0, PROJECT_OUTPUT);
-        RemoveEpsLocal(&fst_0);
+        RmEpsilon(&fst_0);
 
         ScaleLattice(scale_am_only, &lat_am); // scales lm to zero.
         ConvertLattice(lat_am, &fst_am); // this adds up the (lm,acoustic) costs to get
         // the normal (tropical) costs.
         Project(&fst_am, PROJECT_OUTPUT);
-        RemoveEpsLocal(&fst_am);
+        RmEpsilon(&fst_am);
         VectorFst<StdArc> tmp = fst_am;
         Determinize(tmp, &fst_am);
         Minimize(&fst_am);
@@ -200,100 +233,118 @@ int main(int argc, char *argv[]) {
       saveFST(fst_am, "key", "ark:fst_am.fsts");
 #endif
 
-      // retain only words appearing in the lattice for efficiency
-      KALDI_LOG << "Filtering L";
-      VectorFst<StdArc> L;
-      filterFST(*pL, fst_0, &L);
-      RmEpsilon(&L);
-#ifdef _DEBUG
-      saveFST(L, "key", "ark:filtered_L.fsts");
-#endif
-
-      KALDI_LOG << "Generate Li x E";
-      VectorFst<StdArc> LixE;
-      {
-        VectorFst<StdArc> Li = L;
-        Invert(&Li);
-        Compose(Li, *pE, &LixE); // *pE was ilabel-sorted
-        RmEpsilon(&LixE);
-      }
-#ifdef _DEBUG
-      saveFST(LixE, "key", "ark:filtered_LixE.fsts");
-#endif
-
       VectorFst<StdArc> s2s; // sequence to sequence FST with confusion weights
-      {
-        // 2. Generate L x Lat_0
-        KALDI_LOG << "Generate L x Lat_0";
-        VectorFst<StdArc> LxLat0;
-        ArcSort(&L, OLabelCompare<StdArc>());
-        Compose(L, fst_0, &LxLat0);
-        RmEpsilon(&LxLat0);
+#ifdef _INPUT_S2S
+      s2s = *ps2s;
+#else
+      if (!s2s_rxfilename.empty()) {
+        if (!s2s_reader.HasKey(key)) {
+          KALDI_ERR << "Wrong s2s file, key " << key << " not found.";
+        }
+        s2s = s2s_reader.Value(key);
+      } else {
+        // retain only words appearing in the lattice for efficiency
+        KALDI_LOG << "Filtering L";
+        VectorFst<StdArc> L;
+        filterFST(*pL, fst_0, &L);
+        RmEpsilon(&L);
 #ifdef _DEBUG
-        saveFST(LxLat0, "key", "ark:LxLat0.fsts");
+        saveFST(L, "key", "ark:filtered_L.fsts");
 #endif
 
-        // 3. Generate (Lat_0 x (Li x E)) x (L x Lat_0)
+        KALDI_LOG << "Generate Li x E";
+        VectorFst<StdArc> LixE;
         {
-          KALDI_LOG << "Generate Lat_0 x (Li x E)";
-          VectorFst<StdArc> tmp;
-          ArcSort(&fst_0, OLabelCompare<StdArc>());
-          Compose(fst_0, LixE, &tmp);
+          VectorFst<StdArc> Li = L;
+          Invert(&Li);
+          Compose(Li, *pE, &LixE); // *pE was ilabel-sorted
+          RmEpsilon(&LixE);
+        }
 #ifdef _DEBUG
-          //saveFST(tmp, "key", "ark:Lat0xLixE.fsts");
+        saveFST(LixE, "key", "ark:filtered_LixE.fsts");
 #endif
-          KALDI_LOG << "Generate Lat_0 x (Li x E) x L";
-          ArcSort(&tmp, OLabelCompare<StdArc>());
-          ArcSort(&L, ILabelCompare<StdArc>());
-          if (confused_path_beam >= 0) {
-            // We only use the delayed FST when pruning is requested, because we do
-            // the optimization in pruning.
-            // Composing KxL2xE and L1'. We assume L1' is ilabel sorted.
-            ComposeFst<StdArc> lazy_compose(tmp, L);
-            tmp.DeleteStates();
 
-            //ProjectFst<StdArc> lazy_project(lazy_compose, PROJECT_OUTPUT);
+        {
+          // 2. Generate L x Lat_0
+          KALDI_LOG << "Generate L x Lat_0";
+          VectorFst<StdArc> LxLat0;
+          ArcSort(&L, OLabelCompare<StdArc>());
+          Compose(L, fst_0, &LxLat0);
+          RmEpsilon(&LxLat0);
+#ifdef _DEBUG
+          saveFST(LxLat0, "key", "ark:LxLat0.fsts");
+#endif
 
-            // This will likely be the most time consuming part, we use a special
-            // pruning algorithm where we don't expand the full FST.
-            KALDI_VLOG(1) << "Prune(Lat0xL'xE)xL, beam=" << confused_path_beam;
-            PruneSpecial(lazy_compose, &s2s, confused_path_beam, max_states);
-          } else {
-            // If no pruning is requested, we do the normal composition.
-            Compose(tmp, L, &s2s);
-            RmEpsilon(&s2s);
+          // 3. Generate (Lat_0 x (Li x E)) x L) x Lat_0
+          {
+            KALDI_LOG << "Generate Lat_0 x (Li x E)";
+            VectorFst<StdArc> tmp;
+            ArcSort(&fst_0, OLabelCompare<StdArc>());
+            Compose(fst_0, LixE, &tmp);
+#ifdef _DEBUG
+            //saveFST(tmp, "key", "ark:Lat0xLixE.fsts");
+#endif
+            KALDI_LOG << "Generate Lat_0 x (Li x E) x L";
+            ArcSort(&tmp, OLabelCompare<StdArc>());
+            ArcSort(&L, ILabelCompare<StdArc>());
+            if (confused_path_beam >= 0) {
+              // We only use the delayed FST when pruning is requested, because we do
+              // the optimization in pruning.
+              // Composing KxL2xE and L1'. We assume L1' is ilabel sorted.
+              ComposeFst<StdArc> lazy_compose(tmp, L);
+              tmp.DeleteStates();
+
+              //ProjectFst<StdArc> lazy_project(lazy_compose, PROJECT_OUTPUT);
+
+              // This will likely be the most time consuming part, we use a special
+              // pruning algorithm where we don't expand the full FST.
+              KALDI_VLOG(1) << "Prune(Lat0xL'xE)xL, beam=" << confused_path_beam;
+              PruneSpecial(lazy_compose, &s2s, confused_path_beam, max_states);
+            } else {
+              // If no pruning is requested, we do the normal composition.
+              Compose(tmp, L, &s2s);
+              RmEpsilon(&s2s);
+            }
+            KALDI_LOG << "Generate (Lat_0 x (Li x E) x L) x Lat_0";
+            Compose(s2s, fst_0, &tmp);
+            RmEpsilon(&tmp);
+            s2s = tmp;
+            /*
+            ArcSort(&LxLat0, ILabelCompare<StdArc>());
+            if (confused_path_beam >= 0) {
+              // We only use the delayed FST when pruning is requested, because we do
+              // the optimization in pruning.
+              // Composing KxL2xE and L1'. We assume L1' is ilabel sorted.
+              ComposeFst<StdArc> lazy_compose(tmp, LxLat0);
+              tmp.DeleteStates();
+
+              //ProjectFst<StdArc> lazy_project(lazy_compose, PROJECT_OUTPUT);
+
+              // This will likely be the most time consuming part, we use a special
+              // pruning algorithm where we don't expand the full FST.
+              KALDI_VLOG(1) << "Prune(Lat0xL'xE)x(LxLat0), beam=" << confused_path_beam;
+              PruneSpecial(lazy_compose, &s2s, confused_path_beam, max_states);
+            } else {
+              // If no pruning is requested, we do the normal composition.
+              Compose(tmp, LxLat0, &s2s);
+              RmEpsilon(&s2s);
+            }*/
+            ArcSort(&s2s, ILabelCompare<StdArc>());
+#ifdef _DEBUG
+            saveFST(s2s, "key", "ark:Lat0xLixExLxLat0.fsts");
+#endif
+            //Determinize(tmp, &tmp2);
           }
-          KALDI_LOG << "Generate (Lat_0 x (Li x E) x L) x Lat_0";
-          Compose(s2s, fst_0, &tmp);
-          RmEpsilon(&tmp);
-          s2s = tmp;
-          /*
-          ArcSort(&LxLat0, ILabelCompare<StdArc>());
-          if (confused_path_beam >= 0) {
-            // We only use the delayed FST when pruning is requested, because we do
-            // the optimization in pruning.
-            // Composing KxL2xE and L1'. We assume L1' is ilabel sorted.
-            ComposeFst<StdArc> lazy_compose(tmp, LxLat0);
-            tmp.DeleteStates();
-
-            //ProjectFst<StdArc> lazy_project(lazy_compose, PROJECT_OUTPUT);
-
-            // This will likely be the most time consuming part, we use a special
-            // pruning algorithm where we don't expand the full FST.
-            KALDI_VLOG(1) << "Prune(Lat0xL'xE)x(LxLat0), beam=" << confused_path_beam;
-            PruneSpecial(lazy_compose, &s2s, confused_path_beam, max_states);
-          } else {
-            // If no pruning is requested, we do the normal composition.
-            Compose(tmp, LxLat0, &s2s);
-            RmEpsilon(&s2s);
-          }*/
-          ArcSort(&s2s, ILabelCompare<StdArc>());
-#ifdef _DEBUG
-          saveFST(s2s, "key", "ark:Lat0xLixExLxLat0.fsts");
-#endif
-          //Determinize(tmp, &tmp2);
         }
       }
+#endif // _INPUT_S2S
+
+      if (s2s_only) {
+        s2s_writer.Write(key, s2s);
+        n_done++;
+        continue;
+      }
+
 #ifdef _STATS
       VectorFst<StdArc> s2s_for_stats;
       {
@@ -304,17 +355,19 @@ int main(int argc, char *argv[]) {
         RmEpsilon(&s2s_for_stats);
       }
 
-      int32 retainNum = 0;
+      int32 retainNum = 0, selfConfNum = 0;
 #endif
 
 
       // 4. Iterate top n paths and get weights for each H 
-      KALDI_LOG << "Iterate top n paths and get weights for each H";
       ScaleLattice(scale_shortestpath, &lat);
+      KALDI_LOG << "Getting " << n << " shortest";
       vector<Lattice> nbest_lats;
       {
         Lattice nbest_lat;
         fst::ShortestPath(lat, &nbest_lat, n);
+
+        ScaleLattice(scale_shortestpath_reverse, &nbest_lat);
         fst::ConvertNbestToVector(nbest_lat, &nbest_lats);
       }
 
@@ -323,6 +376,7 @@ int main(int argc, char *argv[]) {
           << "(no N-best entries)";
       } else {
         Lattice lat_union; 
+        KALDI_LOG << "Iterate top n paths and get weights for each H";
         KALDI_LOG << "Union tuned paths: " << nbest_lats.size();
         for (int32 k = 0; k < static_cast<int32>(nbest_lats.size()); k++) {
           std::ostringstream os;
@@ -331,137 +385,183 @@ int main(int argc, char *argv[]) {
           //std::string nbest_key = os.str();
           Lattice H_tuned = nbest_lats[k];
 
-#ifdef _DEBUG
           {
-            std::ostringstream os1, os2;
-            os1 << "H_with_score" << k;
-            os2 << "ark:" << os1.str() << ".fsts";
-            saveLattice(H_tuned, os1.str(), os2.str());
-          }
-#endif
-
-          ScaleLattice(scale_0, &(nbest_lats[k]));
-          ScaleLattice(scale_lm_only, &H_tuned);
-#ifdef _DEBUG
-          {
-            std::ostringstream os3, os4;
-            os3 << "H_with_LM" << k;
-            os4 << "ark:" << os3.str() << ".fsts";
-            saveLattice(H_tuned, os3.str(), os4.str());
-          }
-#endif
-
-          LogArc::Weight acoustic_weight;
-          {
-            VectorFst<StdArc> H;
-            ConvertLattice(nbest_lats[k], &H);
-            Project(&H, fst::PROJECT_OUTPUT);
-            RmEpsilon(&H);
 #ifdef _DEBUG
             {
-              std::ostringstream os;
-              os << "ark:H" << k << ".fsts";
-              saveFST(H, "key", os.str());
+              std::ostringstream os1, os2;
+              os1 << "H_with_score" << k;
+              os2 << "ark:" << os1.str() << ".fsts";
+              saveLattice(H_tuned, os1.str(), os2.str());
             }
+#endif
+
+            ScaleLattice(scale_0, &(nbest_lats[k]));
+            ScaleLattice(scale_lm_only, &H_tuned);
+#ifdef _DEBUG
+            {
+              std::ostringstream os3, os4;
+              os3 << "H_with_LM" << k;
+              os4 << "ark:" << os3.str() << ".fsts";
+              saveLattice(H_tuned, os3.str(), os4.str());
+            }
+#endif
+
+            LogArc::Weight acoustic_weight;
+            //StdArc::Weight acoustic_weight;
+            {
+              VectorFst<StdArc> H;
+              ConvertLattice(nbest_lats[k], &H);
+              Project(&H, fst::PROJECT_OUTPUT);
+              RmEpsilon(&H);
+#ifdef _DEBUG
+              {
+                std::ostringstream os;
+                os << "ark:H" << k << ".fsts";
+                saveFST(H, "key", os.str());
+              }
 #endif
 
 #ifdef _STATS
-            {
-              // Check whether s2s contains this H
-              VectorFst<StdArc> tmp;
-              Compose(H, s2s_for_stats, &tmp);
-              RmEpsilon(&tmp);
-              if (!(tmp.NumStates() == 0 || (tmp.NumStates() == 1 && tmp.NumArcs(tmp.Start()) == 0)) ) {
-                retainNum++;
+              {
+                // Check whether s2s contains this H
+                VectorFst<StdArc> tmp;
+                Compose(H, s2s_for_stats, &tmp);
+                RmEpsilon(&tmp);
+                if (!(tmp.NumStates() == 0 || (tmp.NumStates() == 1 && tmp.NumArcs(tmp.Start()) == 0)) ) {
+                  retainNum++;
+                }
+              }
+#endif
+
+              VectorFst<StdArc> fst_confusion_given_H;
+              {
+                VectorFst<StdArc> tmp;
+                Compose(H, s2s, &tmp); // s2s was ilabel-sorted
+                Project(&tmp, PROJECT_OUTPUT);
+                RmEpsilon(&tmp);
+                // LogArc
+                VectorFst<LogArc> fst_log, tmp_log;
+                Cast(tmp, &fst_log);
+                Determinize(fst_log, &tmp_log);
+                RmEpsilon(&tmp_log);
+                Minimize(&tmp_log);
+                RmEpsilon(&tmp_log);
+                Cast(tmp_log, &fst_confusion_given_H);
+                
+                /* // StdArc
+                Determinize(tmp, &fst_confusion_given_H);
+                RmEpsilon(&fst_confusion_given_H);
+                Minimize(&fst_confusion_given_H);
+                RmEpsilon(&fst_confusion_given_H);
+                */
+              }
+#ifdef _DEBUG
+              {
+                std::ostringstream os;
+                os << "ark:H" << k << "xLat0xLixExLxLat0.fsts";
+                saveFST(fst_confusion_given_H, "key", os.str());
+              }
+#endif
+#ifdef _STATS
+              {
+                /*
+                VectorFst<StdArc> tmp;
+                Compose(H, fst_confusion_given_H, &tmp);
+                RmEpsilon(&tmp);
+                if (!(tmp.NumStates() == 0 || (tmp.NumStates() == 1 && tmp.NumArcs(tmp.Start()) == 0)) ) {
+                  KALDI_LOG << "Confusion weight of H confused to H (before stoch): " << ComputeDagTotalWeight(tmp).Value();
+                }
+                */
+              }
+#endif
+              {
+                VectorFst<LogArc> fst_log;
+                Cast(fst_confusion_given_H, &fst_log);
+                RescaleDagToStochastic(&fst_log);
+                Cast(fst_log, &fst_confusion_given_H);
+              }
+#ifdef _STATS
+              {
+                // Check whether fst_confusion_given_H contains this H
+                VectorFst<StdArc> tmp;
+                Compose(H, fst_confusion_given_H, &tmp);
+                RmEpsilon(&tmp);
+                if (!(tmp.NumStates() == 0 || (tmp.NumStates() == 1 && tmp.NumArcs(tmp.Start()) == 0)) ) {
+                  selfConfNum++;
+                  //KALDI_LOG << "Confusion weight of H confused to H (after stoch): " << ComputeDagTotalWeight(tmp).Value();
+                }
+              }
+#endif
+
+#ifdef _DEBUG
+              {
+                std::ostringstream os;
+                os << "ark:stoch_H" << k << "xLat0xLixExLxLat0.fsts";
+                saveFST(fst_confusion_given_H, "key", os.str());
+              }
+#endif
+
+              // Get fst_tuned_for_H (full lattice with each path's weight = conf_weight + am_weight)
+              VectorFst<StdArc> fst_tuned_for_H;
+              Compose(fst_confusion_given_H, fst_am, &fst_tuned_for_H); // fst_am was ilabel-sorted
+              //////////////////////////////
+              //Compose(H, fst_am, &fst_tuned_for_H); // TEST, should result in original WER
+              //////////////////////////////
+              Project(&fst_tuned_for_H, PROJECT_OUTPUT); // so it can be determinized
+              RmEpsilon(&fst_tuned_for_H);
+              {
+                VectorFst<StdArc> tmp = fst_tuned_for_H;
+                Determinize(tmp, &fst_tuned_for_H);
+              }
+              
+#ifdef _DEBUG
+              {
+                std::ostringstream os;
+                os << "ark:det_H" << k << "xLat0xLixExLxLat0xAM.fsts";
+                saveFST(fst_tuned_for_H, "key", os.str());
+              }
+#endif
+              {
+                // LogArc
+                VectorFst<LogArc> fst_log;
+                Cast(fst_tuned_for_H, &fst_log);
+                acoustic_weight = ComputeDagTotalWeight(fst_log);
+                //acoustic_weight = ComputeDagTotalWeight(fst_tuned_for_H); //StdArc
+                //KALDI_LOG << "Total weight of path " << k << " is " << acoustic_weight.Value();
               }
             }
-#endif
-
-            VectorFst<StdArc> fst_confusion_given_H;
+            
+            // Set acoustic score on 1st arc
             {
-              VectorFst<StdArc> tmp;
-              VectorFst<LogArc> fst_log, tmp_log;
-              Compose(H, s2s, &tmp); // s2s was ilabel-sorted
-              Project(&tmp, PROJECT_OUTPUT);
-              RmEpsilon(&tmp);
-              Cast(tmp, &fst_log);
-              Determinize(fst_log, &tmp_log);
-              RmEpsilon(&tmp_log);
-              //Push(&fst_confusion_given_H, REWEIGHT_TO_INITIAL);
-              Determinize(fst_log, &tmp_log);
-              Minimize(&tmp_log);
-              RmEpsilon(&tmp_log);
-              Cast(tmp_log, &fst_confusion_given_H);
+              LatticeArc::StateId s = H_tuned.Start();
+              KALDI_ASSERT(H_tuned.NumArcs(s) == 1);
+              ArcIterator<Lattice > aiter(H_tuned, s);
+              LatticeArc first_arc = aiter.Value();
+              first_arc.weight.SetValue2(acoustic_weight.Value());
+              H_tuned.DeleteArcs(s);
+              H_tuned.AddArc(s, first_arc);
             }
 #ifdef _DEBUG
             {
-              std::ostringstream os;
-              os << "ark:H" << k << "xLat0xLixExLxLat0.fsts";
-              saveFST(fst_confusion_given_H, "key", os.str());
+              std::ostringstream os, os2;
+              os << "H" << k << "_tuned";
+              os2 << "ark:H" << k << "_tuned.fsts";
+              saveLattice(H_tuned, os.str(), os2.str());
             }
 #endif
-            {
-              VectorFst<LogArc> fst_log;
-              Cast(fst_confusion_given_H, &fst_log);
-              RescaleDagToStochastic(&fst_log);
-              Cast(fst_log, &fst_confusion_given_H);
-            }
-#ifdef _DEBUG
-            {
-              std::ostringstream os;
-              os << "ark:stoch_H" << k << "xLat0xLixExLxLat0.fsts";
-              saveFST(fst_confusion_given_H, "key", os.str());
-            }
-#endif
-
-            VectorFst<StdArc> fst_tuned_for_H;
-            Compose(fst_confusion_given_H, fst_am, &fst_tuned_for_H); // fst_am was ilabel-sorted
-#ifdef _DEBUG
-            {
-              std::ostringstream os;
-              os << "ark:H" << k << "xLat0xLixExLxLat0xAM.fsts";
-              saveFST(fst_tuned_for_H, "key", os.str());
-            }
-#endif
-            Project(&fst_tuned_for_H, PROJECT_OUTPUT); // so it can be determinized
-            RmEpsilon(&fst_tuned_for_H);
-            {
-              VectorFst<StdArc> tmp = fst_tuned_for_H;
-              Determinize(tmp, &fst_tuned_for_H);
-            }
-#ifdef _DEBUG
-            {
-              std::ostringstream os;
-              os << "ark:det_H" << k << "xLat0xLixExLxLat0xAM.fsts";
-              saveFST(fst_tuned_for_H, "key", os.str());
-            }
-#endif
-            {
-              VectorFst<LogArc> fst_log;
-              Cast(fst_tuned_for_H, &fst_log);
-              acoustic_weight = ComputeDagTotalWeight(fst_log);
-              //KALDI_LOG << "Total weight of path " << k << " is " << acoustic_weight.Value();
-            }
           }
-          
-          // Set acoustic score on 1st arc
-          LatticeArc::StateId s = H_tuned.Start();
-          KALDI_ASSERT(H_tuned.NumArcs(s) == 1);
-          ArcIterator<Lattice > aiter(H_tuned, s);
-          LatticeArc first_arc = aiter.Value();
-          first_arc.weight.SetValue2(acoustic_weight.Value());
-          H_tuned.DeleteArcs(s);
-          H_tuned.AddArc(s, first_arc);
-#ifdef _DEBUG
-          {
-            std::ostringstream os, os2;
-            os << "H" << k << "_tuned";
-            os2 << "ark:H" << k << "_tuned.fsts";
-            saveLattice(H_tuned, os.str(), os2.str());
-          }
-#endif
-          
+
           Union(&lat_union, H_tuned);
+          // Optimize every 10k paths, otherwise it may cause segmentation error in some case
+          if (k % 10000 == 0) {
+            Project(&lat_union, PROJECT_OUTPUT);
+            RmEpsilon(&lat_union);
+            {
+              Lattice tmp = lat_union;
+              Determinize(tmp, &lat_union);
+            }
+            Minimize(&lat_union);
+          }
         }
 #ifdef _DEBUG
         saveLattice(lat_union, "union_H", "ark:union_H.fsts");
@@ -470,17 +570,19 @@ int main(int argc, char *argv[]) {
 #ifdef _STATS
         {
           double this_retainRate = 1.0 * retainNum / nbest_lats.size();
+          double this_selfConfRate = 1.0 * selfConfNum / nbest_lats.size();
           retainRate += this_retainRate;
+          selfConfRate += this_selfConfRate;
           KALDI_LOG << "Retained rate: " << this_retainRate * 100 << " %";
+          KALDI_LOG << "Self confusion rate: " << this_selfConfRate * 100 << " %";
         }
 #endif
 
-        KALDI_LOG << "Optimize: det and min";
         {
+          KALDI_LOG << "Optimize: det and min";
           Lattice tmp;
-          RmEpsilon(&lat_union);
           Project(&lat_union, PROJECT_OUTPUT);
-          //Disambiguate(lat_union, &tmp);
+          RmEpsilon(&lat_union);
           //saveLattice(tmp, "disam_union_H", "ark:disam_union_H.fsts");
           tmp = lat_union;
           Determinize(tmp, &lat_union);
@@ -495,14 +597,19 @@ int main(int argc, char *argv[]) {
 
         CompactLattice clat_tuned;
         ConvertLattice(lat_union, &clat_tuned); // write in compact form.
-        tuned_lattice_writer.Write(key, clat_tuned);
+        lattice_writer.Write(key, clat_tuned);
         n_done++;
       }
     }
-    delete pL;
-    delete pE;
+    if (s2s_rxfilename.empty()) {
+      delete pL;
+      delete pE;
+    }
 
+#ifdef _STATS
     KALDI_LOG << "Average retained rate: " << 100.0 * retainRate / n_done << " %";
+    KALDI_LOG << "Average self confusion rate: " << 100.0 * selfConfRate / n_done << " %";
+#endif
     KALDI_LOG << "Done " << n_done << " lattices, failed for " << n_fail;
     return (n_done != 0 ? 0 : 1);
   } catch(const std::exception &e) {
