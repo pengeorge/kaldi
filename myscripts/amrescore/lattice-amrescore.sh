@@ -174,6 +174,7 @@ if [ ! -f $s2sdir/.done ]; then
   else
     echo "Generating s2s..."
     eval_nj=`cat $decodedir/num_jobs`
+    mkdir -p $s2sdir
     touch $s2sdir/.running
     # acwt, n are not used here
     $decode_cmd JOB=1:$eval_nj $s2sdir/log/s2s.JOB.log \

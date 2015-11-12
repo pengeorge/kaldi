@@ -31,6 +31,7 @@ script:
   - CC=c99
     CXX=g++-4.9
     CFLAGS="-march=native"
+    CXXFLAGS="-std=gnu++11"
     LDFLAGS="-llapack"
     INCDIRS="$XROOT/usr/include"
     LIBDIRS="$XROOT/usr/lib"
